@@ -7,7 +7,7 @@
 
 namespace Friendica\Console;
 
-use Friendica\App;
+use Friendica\App\Mode;
 use Friendica\Core\Config\Capability\IManageConfigValues;
 
 /**
@@ -18,7 +18,7 @@ class Maintenance extends \Asika\SimpleConsole\Console
 	protected $helpOptions = ['h', 'help', '?'];
 
 	/**
-	 * @var App\Mode
+	 * @var Mode
 	 */
 	private $appMode;
 	/**
@@ -55,18 +55,18 @@ HELP;
 		return $help;
 	}
 
-	public function __construct(App\Mode $appMode, IManageConfigValues $config, $argv = null)
+	public function __construct(Mode $appMode, IManageConfigValues $config, $argv = null)
 	{
 		parent::__construct($argv);
 
 		$this->appMode = $appMode;
-		$this->config = $config;
+		$this->config  = $config;
 	}
 
 	protected function doExecute(): int
 	{
 		if ($this->getOption('v')) {
-			$this->out('Class: ' . __CLASS__);
+			$this->out('Class: ' . self::class);
 			$this->out('Arguments: ' . var_export($this->args, true));
 			$this->out('Options: ' . var_export($this->options, true));
 		}

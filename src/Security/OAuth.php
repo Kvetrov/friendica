@@ -7,10 +7,10 @@
 
 namespace Friendica\Security;
 
-use Friendica\Core\Logger;
 use Friendica\Core\Worker;
 use Friendica\Database\Database;
 use Friendica\Database\DBA;
+use Friendica\DI;
 use Friendica\Model\Contact;
 use Friendica\Model\User;
 use Friendica\Module\BaseApi;
@@ -46,7 +46,7 @@ class OAuth
 			}
 		}
 
-		return (int)self::$current_user_id;
+		return (int) self::$current_user_id;
 	}
 
 	/**
@@ -85,10 +85,10 @@ class OAuth
 
 		$token = DBA::selectFirst('application-view', ['uid', 'id', 'name', 'website', 'created_at', 'read', 'write', 'follow', 'push'], $condition);
 		if (!DBA::isResult($token)) {
-			Logger::notice('Token not found', $condition);
+			DI::logger()->notice('Token not found', $condition);
 			return [];
 		}
-		Logger::debug('Token found', $token);
+		DI::logger()->debug('Token found', $token);
 
 		$user = User::getById($token['uid'], ['uid', 'parent-uid', 'last-activity', 'login_date']);
 		if (!empty($user)) {
@@ -120,19 +120,19 @@ class OAuth
 
 		if (!empty($redirect_uri)) {
 			$redirect_uri = strtok($redirect_uri, '?');
-			$condition = DBA::mergeConditions($condition, ["`redirect_uri` LIKE ?", '%' . $redirect_uri . '%']);
+			$condition    = DBA::mergeConditions($condition, ["`redirect_uri` LIKE ?", '%' . $redirect_uri . '%']);
 		}
 
 		$application = DBA::selectFirst('application', [], $condition);
 		if (!DBA::isResult($application)) {
-			Logger::warning('Application not found', $condition);
+			DI::logger()->warning('Application not found', $condition);
 			return [];
 		}
 
 		// The redirect_uri could contain several URI that are separated by spaces or new lines.
 		$uris = explode(' ', str_replace(["\n", "\r", "\t"], ' ', $application['redirect_uri']));
 		if (!in_array($redirect_uri, $uris)) {
-			Logger::warning('Redirection uri does not match', ['redirect_uri' => $redirect_uri, 'application-redirect_uri' => $application['redirect_uri']]);
+			DI::logger()->warning('Redirection uri does not match', ['redirect_uri' => $redirect_uri, 'application-redirect_uri' => $application['redirect_uri']]);
 			return [];
 		}
 
@@ -173,8 +173,16 @@ class OAuth
 	 */
 	public static function createTokenForUser(array $application, int $uid, string $scope)
 	{
-		$code         = bin2hex(random_bytes(32));
-		$access_token = bin2hex(random_bytes(32));
+		$token = DBA::selectFirst('application-token', [], ['application-id' => $application['id'], 'uid' => $uid]);
+		if ($token) {
+			DI::logger()->info('Found existing user token.', ['application' => $application, 'uid' => $uid]);
+			$code         = $token['code'];
+			$access_token = $token['access_token'];
+		} else {
+			DI::logger()->info('Create new user token.', ['application' => $application, 'uid' => $uid]);
+			$code         = bin2hex(random_bytes(32));
+			$access_token = bin2hex(random_bytes(32));
+		}
 
 		$fields = [
 			'application-id' => $application['id'],
@@ -186,12 +194,12 @@ class OAuth
 			'write'          => (stripos($scope, BaseApi::SCOPE_WRITE) !== false),
 			'follow'         => (stripos($scope, BaseApi::SCOPE_FOLLOW) !== false),
 			'push'           => (stripos($scope, BaseApi::SCOPE_PUSH) !== false),
-			'created_at'     => DateTimeFormat::utcNow()
+			'created_at'     => DateTimeFormat::utcNow(),
 		];
 
 		foreach ([BaseApi::SCOPE_READ, BaseApi::SCOPE_WRITE, BaseApi::SCOPE_FOLLOW, BaseApi::SCOPE_PUSH] as $scope) {
 			if ($fields[$scope] && !$application[$scope]) {
-				Logger::warning('Requested token scope is not allowed for the application', ['token' => $fields, 'application' => $application]);
+				DI::logger()->warning('Requested token scope is not allowed for the application', ['token' => $fields, 'application' => $application]);
 			}
 		}
 

@@ -7,7 +7,6 @@
 
 namespace Friendica\Module\ActivityPub;
 
-use Friendica\Core\Logger;
 use Friendica\Core\Protocol;
 use Friendica\Core\System;
 use Friendica\Database\DBA;
@@ -54,6 +53,9 @@ class Inbox extends BaseApi
 			$inbox = ActivityPub\ClientToServer::getPublicInbox($uid, $page, $request['max_id'] ?? null);
 		}
 
+		// Relaxed CORS header already authorized
+		header('Access-Control-Allow-Origin: *');
+
 		$this->jsonExit($inbox, 'application/activity+json');
 	}
 
@@ -66,7 +68,7 @@ class Inbox extends BaseApi
 		}
 
 		if (!HTTPSignature::isValidContentType($this->server['CONTENT_TYPE'] ?? '')) {
-			Logger::notice('Unexpected content type', ['content-type' => $this->server['CONTENT_TYPE'] ?? '', 'agent' => $this->server['HTTP_USER_AGENT'] ?? '']);
+			$this->logger->notice('Unexpected content type', ['content-type' => $this->server['CONTENT_TYPE'] ?? '', 'agent' => $this->server['HTTP_USER_AGENT'] ?? '']);
 			throw new \Friendica\Network\HTTPException\UnsupportedMediaTypeException();
 		}
 
@@ -78,7 +80,7 @@ class Inbox extends BaseApi
 			}
 			$tempfile = tempnam(System::getTempPath(), $filename);
 			file_put_contents($tempfile, json_encode(['parameters' => $this->parameters, 'header' => $_SERVER, 'body' => $postdata], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
-			Logger::notice('Incoming message stored', ['file' => $tempfile]);
+			$this->logger->notice('Incoming message stored', ['file' => $tempfile]);
 		}
 
 		if (!empty($this->parameters['nickname'])) {

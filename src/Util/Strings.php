@@ -8,7 +8,7 @@
 namespace Friendica\Util;
 
 use Friendica\Content\ContactSelector;
-use Friendica\Core\Logger;
+use Friendica\DI;
 use ParagonIE\ConstantTime\Base64;
 
 /**
@@ -96,17 +96,17 @@ class Strings
 			'v',
 			'w', 'wh',
 			'x',
-			'z', 'zh'
+			'z', 'zh',
 		];
 
 		$midcons = [
 			'ck', 'ct', 'gn', 'ld', 'lf', 'lm', 'lt', 'mb', 'mm', 'mn', 'mp',
-			'nd', 'ng', 'nk', 'nt', 'rn', 'rp', 'rt'
+			'nd', 'ng', 'nk', 'nt', 'rn', 'rp', 'rt',
 		];
 
 		$noend = [
 			'bl', 'br', 'cl', 'cr', 'dr', 'fl', 'fr', 'gl', 'gr',
-			'kh', 'kl', 'kr', 'mn', 'pl', 'pr', 'rh', 'tr', 'qu', 'wh', 'q'
+			'kh', 'kl', 'kr', 'mn', 'pl', 'pr', 'rh', 'tr', 'qu', 'wh', 'q',
 		];
 
 		$start = mt_rand(0, 2);
@@ -147,15 +147,16 @@ class Strings
 	 *
 	 * @param string $network Network name of the contact (e.g. dfrn, rss and so on)
 	 * @param string $url	  The contact url
+	 * @param int    $gsid    Server id
 	 *
 	 * @return string Formatted network name
 	 * @throws \Friendica\Network\HTTPException\InternalServerErrorException
 	 */
-	public static function formatNetworkName(string $network, string $url = ''): string
+	public static function formatNetworkName(string $network, string $url = '', ?int $gsid = null): string
 	{
 		if ($network != '') {
 			if ($url != '') {
-				$gsid = ContactSelector::getServerIdForProfile($url);
+				$gsid         = $gsid ?? ContactSelector::getServerIdForProfile($url);
 				$network_name = '<a href="' . $url . '">' . ContactSelector::networkToName($network, '', $gsid) . '</a>';
 			} else {
 				$network_name = ContactSelector::networkToName($network);
@@ -209,13 +210,13 @@ class Strings
 	{
 		// If this method is called for an infinite (== unlimited) amount of bytes:
 		if ($bytes == INF) {
-			return INF;
+			return 'INF';
 		}
 
 		$units = ['B', 'KiB', 'MiB', 'GiB', 'TiB'];
 		$bytes = max($bytes, 0);
-		$pow = floor(($bytes ? log($bytes) : 0) / log(1024));
-		$pow = min($pow, count($units) - 1);
+		$pow   = floor(($bytes ? log($bytes) : 0) / log(1024));
+		$pow   = min($pow, count($units) - 1);
 		$bytes /= pow(1024, $pow);
 
 		return round($bytes, $precision) . ' ' . $units[$pow];
@@ -444,17 +445,17 @@ class Strings
 	{
 		$string_length = mb_strlen($string);
 
-		$length = $length ?? $string_length;
+		$length ??= $string_length;
 
 		if ($start < 0) {
 			$start = max(0, $string_length + $start);
-		} else if ($start > $string_length) {
+		} elseif ($start > $string_length) {
 			$start = $string_length;
 		}
 
 		if ($length < 0) {
 			$length = max(0, $string_length - $start + $length);
-		} else if ($length > $string_length) {
+		} elseif ($length > $string_length) {
 			$length = $string_length;
 		}
 
@@ -494,11 +495,11 @@ class Strings
 
 				return $return;
 			},
-			$text
+			$text,
 		);
 
 		if (is_null($return)) {
-			Logger::notice('Received null value from preg_replace_callback', ['text' => $text, 'regex' => $regex, 'blocks' => $blocks, 'executionId' => $executionId]);
+			DI::logger()->notice('Received null value from preg_replace_callback', ['text' => $text, 'regex' => $regex, 'blocks' => $blocks, 'executionId' => $executionId]);
 		}
 
 		$text = $callback($return ?? $text) ?? '';
@@ -509,11 +510,11 @@ class Strings
 			function ($matches) use ($blocks) {
 				$return = $matches[0];
 				if (isset($blocks[intval($matches[1])])) {
-					$return = $blocks[$matches[1]];
+					$return = $blocks[intval($matches[1])];
 				}
 				return $return;
 			},
-			$text
+			$text,
 		);
 
 		return $text;
@@ -530,8 +531,12 @@ class Strings
 	{
 		$shorthand = trim($shorthand);
 
-		if (is_numeric($shorthand)) {
-			return $shorthand;
+		if (ctype_digit(ltrim($shorthand, '-'))) {
+			return (int) $shorthand;
+		}
+
+		if ($shorthand === '') {
+			return 0;
 		}
 
 		$last      = strtolower($shorthand[strlen($shorthand) - 1]);
@@ -540,8 +545,10 @@ class Strings
 		switch ($last) {
 			case 'g':
 				$shorthand *= 1024;
+				// no break
 			case 'm':
 				$shorthand *= 1024;
+				// no break
 			case 'k':
 				$shorthand *= 1024;
 		}
@@ -563,7 +570,7 @@ class Strings
 			return $url;
 		}
 
-		$scheme = [$parts['scheme'] . '://www.', $parts['scheme'] . '://'];
+		$scheme     = [$parts['scheme'] . '://www.', $parts['scheme'] . '://'];
 		$styled_url = str_replace($scheme, '', $url);
 
 		if (!empty($max_length) && strlen($styled_url) > $max_length) {
@@ -603,5 +610,25 @@ class Strings
 	public static function getTagArrayByString(string $tag_list): array
 	{
 		return explode(',', self::cleanTags($tag_list));
+	}
+
+	/**
+	 * Convert the first character of a string to uppercase.
+	 * Handles the missing base function mb_ucfirst() gracefully.
+	 *
+	 * @param string $string
+	 * @return string String with first character in uppercase
+	 */
+	public static function ucFirst(string $string): string
+	{
+		if (function_exists('mb_ucfirst')) {
+			return mb_ucfirst($string);
+		}
+
+		if (function_exists('mb_substr') && function_exists('mb_strtoupper')) {
+			return mb_strtoupper(mb_substr($string, 0, 1)) . mb_substr($string, 1);
+		}
+
+		return ucfirst($string);
 	}
 }

@@ -12,15 +12,16 @@ use Friendica\Content\ContactSelector;
 use Friendica\Content\Item as ContentItem;
 use Friendica\Content\Smilies;
 use Friendica\Content\Text\BBCode;
-use Friendica\Core\Logger;
 use Friendica\Core\Protocol;
 use Friendica\Database\Database;
 use Friendica\Database\DBA;
 use Friendica\DI;
+use Friendica\Event\ArrayFilterEvent;
 use Friendica\Model\Item;
 use Friendica\Model\Post;
 use Friendica\Model\Verb;
-use Friendica\Network\HTTPException;
+use Friendica\Network\HTTPException\InternalServerErrorException;
+use Friendica\Network\HTTPException\NotFoundException;
 use Friendica\Object\Api\Mastodon\Status\FriendicaDeliveryData;
 use Friendica\Object\Api\Mastodon\Status\FriendicaExtension;
 use Friendica\Object\Api\Mastodon\Status\FriendicaVisibility;
@@ -28,6 +29,7 @@ use Friendica\Protocol\Activity;
 use Friendica\Protocol\ActivityPub;
 use Friendica\Util\ACLFormatter;
 use ImagickException;
+use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Log\LoggerInterface;
 
 class Status extends BaseFactory
@@ -52,8 +54,10 @@ class Status extends BaseFactory
 	private $contentItem;
 	/** @var ACLFormatter */
 	private $aclFormatter;
+	private EventDispatcherInterface $eventDispatcher;
 
 	public function __construct(
+		EventDispatcherInterface $eventDispatcher,
 		LoggerInterface $logger,
 		Database $dba,
 		Account $mstdnAccountFactory,
@@ -77,31 +81,32 @@ class Status extends BaseFactory
 		$this->mstdnPollFactory       = $mstdnPollFactory;
 		$this->contentItem            = $contentItem;
 		$this->aclFormatter           = $aclFormatter;
+		$this->eventDispatcher        = $eventDispatcher;
 	}
 
 	/**
 	 * @param int  $uriId           Uri-ID of the item
 	 * @param int  $uid             Item user
-	 * @param bool $display_quote   Display quoted posts
 	 * @param bool $reblog          Check for reblogged post
 	 * @param bool $in_reply_status Add an "in_reply_status" element
+	 * @param int  $level           Recursion level for quotes
 	 *
 	 * @return \Friendica\Object\Api\Mastodon\Status
-	 * @throws HTTPException\InternalServerErrorException
-	 * @throws ImagickException|HTTPException\NotFoundException
+	 * @throws InternalServerErrorException
+	 * @throws ImagickException|NotFoundException
 	 */
-	public function createFromUriId(int $uriId, int $uid = 0, bool $display_quote = false, bool $reblog = true, bool $in_reply_status = true): \Friendica\Object\Api\Mastodon\Status
+	public function createFromUriId(int $uriId, int $uid = 0, bool $reblog = true, bool $in_reply_status = true, int $level = 0): \Friendica\Object\Api\Mastodon\Status
 	{
-		$fields = ['uri-id', 'uid', 'author-id', 'causer-id', 'author-uri-id', 'author-link', 'author-gsid', 'causer-uri-id', 'post-reason', 'starred', 'app', 'title', 'body', 'raw-body', 'content-warning', 'question-id',
+		$fields = ['uri-id', 'uid', 'guid', 'author-id', 'causer-id', 'author-uri-id', 'author-link', 'author-gsid', 'author-network', 'author-alias', 'causer-uri-id', 'post-reason', 'starred', 'app', 'title', 'body', 'raw-body', 'content-warning', 'question-id',
 			'created', 'edited', 'commented', 'received', 'changed', 'network', 'thr-parent-id', 'parent-author-id', 'language', 'uri', 'plink', 'private', 'vid', 'gravity', 'featured', 'has-media', 'quote-uri-id',
-			'delivery_queue_count', 'delivery_queue_done','delivery_queue_failed', 'allow_cid', 'deny_cid', 'allow_gid', 'deny_gid', 'sensitive'];
+			'delivery_queue_count', 'delivery_queue_done','delivery_queue_failed', 'allow_cid', 'deny_cid', 'allow_gid', 'deny_gid', 'sensitive', 'postopts'];
 		$item = Post::selectFirst($fields, ['uri-id' => $uriId, 'uid' => [0, $uid]], ['order' => ['uid' => true]]);
 		if (!$item) {
 			$mail = DBA::selectFirst('mail', ['id'], ['uri-id' => $uriId, 'uid' => $uid]);
 			if ($mail) {
 				return $this->createFromMailId($mail['id']);
 			}
-			throw new HTTPException\NotFoundException('Item with URI ID ' . $uriId . ' not found' . ($uid ? ' for user ' . $uid : '.'));
+			throw new NotFoundException('Item with URI ID ' . $uriId . ' not found' . ($uid ? ' for user ' . $uid : '.'));
 		}
 
 		$activity_fields = ['uri-id', 'thr-parent-id', 'uri', 'author-id', 'author-uri-id', 'author-link', 'app', 'created', 'network', 'parent-author-id', 'private'];
@@ -113,7 +118,7 @@ class Status extends BaseFactory
 			$activity   = $item;
 			$item       = Post::selectFirst($fields, ['uri-id' => $uriId, 'uid' => [0, $uid]], ['order' => ['uid' => true]]);
 			if (!$item) {
-				throw new HTTPException\NotFoundException('Item with URI ID ' . $uriId . ' not found' . ($uid ? ' for user ' . $uid : '.'));
+				throw new NotFoundException('Item with URI ID ' . $uriId . ' not found' . ($uid ? ' for user ' . $uid : '.'));
 			}
 			foreach ($activity_fields as $field) {
 				$item[$field] = $activity[$field];
@@ -129,36 +134,24 @@ class Status extends BaseFactory
 			}
 		}
 
-		$count_announce = Post::countPosts([
+		$condition = [
 			'thr-parent-id' => $uriId,
 			'gravity'       => Item::GRAVITY_ACTIVITY,
-			'vid'           => Verb::getID(Activity::ANNOUNCE),
-			'deleted'       => false
-		]) + Post::countPosts([
-			'quote-uri-id' => $uriId,
-			'body'         => '',
-			'deleted'      => false
-		]);
+			'deleted'       => false,
+		];
+		$condition = DBA::mergeConditions($condition, ["((`uid` = ? AND `global`) OR (`uid` = ? AND NOT `global`))", 0, $uid]);
 
-		$count_like = Post::countPosts([
-			'thr-parent-id' => $uriId,
-			'gravity'       => Item::GRAVITY_ACTIVITY,
-			'vid'           => Verb::getID(Activity::LIKE),
-			'deleted'       => false
-		]);
+		$count_announce = Post::count(DBA::mergeConditions($condition, ['vid' => Verb::getID(Activity::ANNOUNCE)]))
+			+ Post::countPosts(['quote-uri-id' => $uriId, 'body' => '', 'deleted' => false]);
 
-		$count_dislike = Post::countPosts([
-			'thr-parent-id' => $uriId,
-			'gravity'       => Item::GRAVITY_ACTIVITY,
-			'vid'           => Verb::getID(Activity::DISLIKE),
-			'deleted'       => false
-		]);
+		$count_like    = Post::count(DBA::mergeConditions($condition, ['vid' => Verb::getID(Activity::LIKE)]));
+		$count_dislike = Post::count(DBA::mergeConditions($condition, ['vid' => Verb::getID(Activity::DISLIKE)]));
 
 		$counts = new \Friendica\Object\Api\Mastodon\Status\Counts(
 			Post::countPosts(['thr-parent-id' => $uriId, 'gravity' => Item::GRAVITY_COMMENT, 'deleted' => false], []),
 			$count_announce,
 			$count_like,
-			$count_dislike
+			$count_dislike,
 		);
 
 		$origin_like = $count_like > 0 && Post::exists([
@@ -167,7 +160,7 @@ class Status extends BaseFactory
 			'origin'        => true,
 			'gravity'       => Item::GRAVITY_ACTIVITY,
 			'vid'           => Verb::getID(Activity::LIKE),
-			'deleted'       => false
+			'deleted'       => false,
 		]);
 		$origin_dislike = $count_dislike > 0 && Post::exists([
 			'thr-parent-id' => $uriId,
@@ -175,7 +168,7 @@ class Status extends BaseFactory
 			'origin'        => true,
 			'gravity'       => Item::GRAVITY_ACTIVITY,
 			'vid'           => Verb::getID(Activity::DISLIKE),
-			'deleted'       => false
+			'deleted'       => false,
 		]);
 		$origin_announce = $count_announce > 0 && (Post::exists([
 			'thr-parent-id' => $uriId,
@@ -183,26 +176,26 @@ class Status extends BaseFactory
 			'origin'        => true,
 			'gravity'       => Item::GRAVITY_ACTIVITY,
 			'vid'           => Verb::getID(Activity::ANNOUNCE),
-			'deleted'       => false
+			'deleted'       => false,
 		]) || Post::exists([
 			'quote-uri-id' => $uriId,
 			'uid'          => $uid,
 			'origin'       => true,
 			'body'         => '',
-			'deleted'      => false
+			'deleted'      => false,
 		]));
 		$userAttributes = new \Friendica\Object\Api\Mastodon\Status\UserAttributes(
 			$origin_like,
 			$origin_announce,
 			Post\ThreadUser::getIgnored($uriId, $uid),
 			$item['starred'] && $item['gravity'] == Item::GRAVITY_PARENT,
-			$item['featured']
+			$item['featured'],
 		);
 
-		$sensitive = (bool)$item['sensitive'];
+		$sensitive = (bool) $item['sensitive'];
 
 		$network  = ContactSelector::networkToName($item['network']);
-		$sitename = ''; 
+		$sitename = '';
 		$platform = '';
 		$version  = '';
 
@@ -211,7 +204,7 @@ class Status extends BaseFactory
 			if (!empty($gserver)) {
 				$platform = ucfirst($gserver['platform']);
 				$version  = $gserver['version'];
-				$sitename = $gserver['site_name']; 
+				$sitename = $gserver['site_name'];
 			}
 		}
 
@@ -219,10 +212,33 @@ class Status extends BaseFactory
 			$platform = ContactSelector::networkToName($item['network'], $item['network'], $item['author-gsid']);
 		}
 
+
+		$hook_data = [
+			'item'           => $item,
+			'uid'            => $uid,
+			'filter_reasons' => [],
+		];
+
+		$hook_data = $this->eventDispatcher->dispatch(
+			new ArrayFilterEvent(ArrayFilterEvent::PREPARE_POST_FILTER_CONTENT, $hook_data),
+		)->getArray();
+
+		if ($this->contentItem->redundantSummary($item['body'], $item['content-warning'])) {
+			$item['content-warning'] = '';
+		}
+
+		$filter_reasons = $hook_data['filter_reasons'];
+		unset($hook_data);
+		if (!empty($filter_reasons)) {
+			$sensitive = true;
+			$item['content-warning'] .= ', ' . implode(', ', $filter_reasons);
+			$item['content-warning'] = trim($item['content-warning'], ', ');
+		}
+
 		$application = new \Friendica\Object\Api\Mastodon\Application($item['app'] ?: $platform);
 
-		$mentions    = $this->mstdnMentionFactory->createFromUriId($uriId)->getArrayCopy();
-		$tags        = $this->mstdnTagFactory->createFromUriId($uriId);
+		$mentions = $this->mstdnMentionFactory->createFromUriId($uriId)->getArrayCopy();
+		$tags     = $this->mstdnTagFactory->createFromUriId($uriId);
 		if ($item['has-media']) {
 			$card        = $this->mstdnCardFactory->createFromUriId($uriId);
 			$attachments = $this->mstdnAttachmentFactory->createFromUriId($uriId);
@@ -237,56 +253,12 @@ class Status extends BaseFactory
 			$poll = null;
 		}
 
-		if ($display_quote) {
-			$quote = self::createQuote($item, $uid);
+		$quote = self::createQuote($item, $uid, $level);
 
-			$item['body'] = BBCode::removeSharedData($item['body']);
+		$item['body'] = BBCode::removeSharedData($item['body']);
 
-			if (!is_null($item['raw-body'])) {
-				$item['raw-body'] = BBCode::removeSharedData($item['raw-body']);
-			}
-		} else {
-			// We can always safely add attached activities. Real quotes are added to the body via "addSharedPost".
-			if (empty($item['quote-uri-id'])) {
-				$quote = self::createQuote($item, $uid);
-			} else {
-				$quote = [];
-			}
-
-			$shared = $this->contentItem->getSharedPost($item, ['uri-id']);
-			if (!empty($shared)) {
-				$shared_uri_id = $shared['post']['uri-id'];
-
-				foreach ($this->mstdnMentionFactory->createFromUriId($shared_uri_id)->getArrayCopy() as $mention) {
-					if (!in_array($mention, $mentions)) {
-						$mentions[] = $mention;
-					}
-				}
-
-				foreach ($this->mstdnTagFactory->createFromUriId($shared_uri_id) as $tag) {
-					if (!in_array($tag, $tags)) {
-						$tags[] = $tag;
-					}
-				}
-
-				foreach ($this->mstdnAttachmentFactory->createFromUriId($shared_uri_id) as $attachment) {
-					if (!in_array($attachment, $attachments)) {
-						$attachments[] = $attachment;
-					}
-				}
-
-				if (empty($card->toArray())) {
-					$card = $this->mstdnCardFactory->createFromUriId($shared_uri_id);
-				}
-			}
-
-			if (!is_null($item['raw-body'])) {
-				$item['raw-body'] = $this->contentItem->addSharedPost($item, $item['raw-body']);
-				$item['raw-body'] = Post\Media::addHTMLLinkToBody($uriId, $item['raw-body']);
-			} else {
-				$item['body'] = $this->contentItem->addSharedPost($item);
-				$item['body'] = Post\Media::addHTMLLinkToBody($uriId, $item['body']);
-			}
+		if (!is_null($item['raw-body'])) {
+			$item['raw-body'] = BBCode::removeSharedData($item['raw-body']);
 		}
 
 		$emojis = null;
@@ -306,9 +278,9 @@ class Status extends BaseFactory
 
 		if ($is_reshare) {
 			try {
-				$reshare = $this->createFromUriId($uriId, $uid, $display_quote, false, false)->toArray();
+				$reshare = $this->createFromUriId($uriId, $uid, false, false)->toArray();
 			} catch (\Exception $exception) {
-				Logger::info('Reshare not fetchable', ['uri-id' => $item['uri-id'], 'uid' => $uid, 'exception' => $exception]);
+				DI::logger()->info('Reshare not fetchable', ['uri-id' => $item['uri-id'], 'uid' => $uid, 'exception' => $exception]);
 				$reshare = [];
 			}
 		} else {
@@ -317,13 +289,18 @@ class Status extends BaseFactory
 
 		if ($in_reply_status && ($item['gravity'] == Item::GRAVITY_COMMENT)) {
 			try {
-				$in_reply = $this->createFromUriId($item['thr-parent-id'], $uid, $display_quote, false, false)->toArray();
+				$in_reply = $this->createFromUriId($item['thr-parent-id'], $uid, false, false)->toArray();
 			} catch (\Exception $exception) {
-				Logger::info('Reply post not fetchable', ['uri-id' => $item['uri-id'], 'uid' => $uid, 'exception' => $exception]);
+				DI::logger()->info('Reply post not fetchable', ['uri-id' => $item['uri-id'], 'uid' => $uid, 'exception' => $exception]);
 				$in_reply = [];
 			}
 		} else {
 			$in_reply = [];
+		}
+
+		$plink = Item::getPlink($item);
+		if ($plink) {
+			$item['plink'] = $plink['href'];
 		}
 
 		$delivery_data   = $uid != $item['uid'] ? null : new FriendicaDeliveryData($item['delivery_queue_count'], $item['delivery_queue_done'], $item['delivery_queue_failed']);
@@ -337,11 +314,15 @@ class Status extends BaseFactory
 	 * Create a quote status object
 	 *
 	 * @param array $item
-	 * @param integer $uid
+	 * @param int   $uid
+	 * @param int   $level
 	 * @return array
 	 */
-	private function createQuote(array $item, int $uid): array
+	private function createQuote(array $item, int $uid, int $level): array
 	{
+		if ($level > 2) {
+			return [];
+		}
 		if (empty($item['quote-uri-id'])) {
 			$media = Post\Media::getByURIId($item['uri-id'], [Post\Media::ACTIVITY]);
 			if (!empty($media)) {
@@ -349,7 +330,7 @@ class Status extends BaseFactory
 					$quote_id = $media['media-uri-id'];
 				} else {
 					$shared_item = Post::selectFirst(['uri-id'], ['plink' => $media[0]['url'], 'uid' => [$uid, 0]]);
-					$quote_id = $shared_item['uri-id'] ?? 0;
+					$quote_id    = $shared_item['uri-id'] ?? 0;
 				}
 			}
 		} else {
@@ -358,9 +339,15 @@ class Status extends BaseFactory
 
 		if (!empty($quote_id) && ($quote_id != $item['uri-id'])) {
 			try {
-				$quote = $this->createFromUriId($quote_id, $uid, false, false, false)->toArray();
+				$quoted_status = $this->createFromUriId($quote_id, $uid, false, false, ++$level)->toArray();
+				$quote         = [
+					'state'         => 'accepted',
+					'quoted_status' => $quoted_status,
+					'account'       => $quoted_status['account'],
+				];
+				$quote = array_merge($quote, $quoted_status);
 			} catch (\Exception $exception) {
-				Logger::info('Quote not fetchable', ['uri-id' => $item['uri-id'], 'uid' => $uid, 'exception' => $exception]);
+				DI::logger()->info('Quote not fetchable', ['uri-id' => $item['uri-id'], 'uid' => $uid, 'exception' => $exception]);
 				$quote = [];
 			}
 		} else {
@@ -370,17 +357,17 @@ class Status extends BaseFactory
 	}
 
 	/**
-	 * @param int $uriId id of the mail
+	 * @param int $id id of the mail
 	 *
 	 * @return \Friendica\Object\Api\Mastodon\Status
-	 * @throws HTTPException\InternalServerErrorException
-	 * @throws ImagickException|HTTPException\NotFoundException
+	 * @throws InternalServerErrorException
+	 * @throws ImagickException|NotFoundException
 	 */
 	public function createFromMailId(int $id): \Friendica\Object\Api\Mastodon\Status
 	{
 		$item = ActivityPub\Transmitter::getItemArrayFromMail($id, true);
 		if (empty($item)) {
-			throw new HTTPException\NotFoundException('Mail record not found with id: ' . $id);
+			throw new NotFoundException('Mail record not found with id: ' . $id);
 		}
 
 		$account = $this->mstdnAccountFactory->createFromContactId($item['author-id']);

@@ -7,10 +7,10 @@
 
 namespace Friendica\Worker;
 
-use Friendica\Core\Logger;
 use Friendica\Core\Worker;
 use Friendica\DI;
 use Friendica\Protocol\ActivityPub;
+use Friendica\Protocol\ActivityPub\Fetch;
 use Friendica\Protocol\ActivityPub\Queue;
 use Friendica\Protocol\ActivityPub\Receiver;
 
@@ -26,26 +26,39 @@ class FetchMissingActivity
 	 */
 	public static function execute(string $url, array $child = [], string $relay_actor = '', int $completion = Receiver::COMPLETION_MANUAL)
 	{
-		Logger::info('Start fetching missing activity', ['url' => $url]);
+		DI::logger()->info('Start fetching missing activity', ['url' => $url]);
 		if (ActivityPub\Processor::alreadyKnown($url, $child['id'] ?? '')) {
-			Logger::info('Activity is already known.', ['url' => $url]);
+			DI::logger()->info('Activity is already known.', ['url' => $url]);
 			return;
 		}
 		$result = ActivityPub\Processor::fetchMissingActivity($url, $child, $relay_actor, $completion);
 		if ($result) {
-			Logger::info('Successfully fetched missing activity', ['url' => $url]);
+			DI::logger()->info('Successfully fetched missing activity', ['url' => $url]);
 		} elseif (is_null($result)) {
-			Logger::info('Permament error, activity could not be fetched', ['url' => $url]);
+			DI::logger()->info('Permament error, activity could not be fetched', ['url' => $url]);
 		} elseif (!Worker::defer(self::WORKER_DEFER_LIMIT)) {
-			Logger::info('Defer limit reached, activity could not be fetched', ['url' => $url]);
+			DI::logger()->info('Defer limit reached, activity could not be fetched', ['url' => $url]);
 
 			// recursively delete all entries that belong to this worker task
-			$queue = DI::app()->getQueue();
+			$queue = DI::appHelper()->getQueue();
 			if (!empty($queue['id'])) {
 				Queue::deleteByWorkerId($queue['id']);
 			}
 		} else {
-			Logger::info('Fetching deferred', ['url' => $url]);
+			DI::logger()->info('Fetching deferred', ['url' => $url]);
 		}
+	}
+
+	public static function add($run_parameters, string $url, array $child = [], string $relay_actor = '', int $completion = Receiver::COMPLETION_MANUAL): int
+	{
+		if (Fetch::hasWorker($url)) {
+			DI::logger()->notice('Fetching is already added as worker task.', ['url' => $url]);
+			return 0;
+		}
+
+		DI::logger()->debug('Fetch Missing Activity', ['url' => $url]);
+		$wid = Worker::add($run_parameters, 'FetchMissingActivity', $url, $child, $relay_actor, $completion);
+		Fetch::setWorkerId($url, $wid);
+		return $wid;
 	}
 }

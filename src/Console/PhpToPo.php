@@ -7,27 +7,27 @@
 
 namespace Friendica\Console;
 
-use Friendica\App;
+use Friendica\AppHelper;
+use stdClass;
 
 /**
  * Read a strings.php file and create messages.po in the same directory
  */
 class PhpToPo extends \Asika\SimpleConsole\Console
 {
-
 	protected $helpOptions = ['h', 'help', '?'];
 
-	private $normBaseMsgIds = [];
-	const NORM_REGEXP = "|[\\\]|";
+	private $normBaseMsgIds  = [];
+	public const NORM_REGEXP = "|[\\\]|";
 
-	/** @var App */
-	private $app;
+	/** @var AppHelper */
+	private $appHelper;
 
-	public function __construct(App $app, array $argv = null)
+	public function __construct(AppHelper $appHelper, array $argv = null)
 	{
 		parent::__construct($argv);
 
-		$this->app = $app;
+		$this->appHelper = $appHelper;
 	}
 
 	protected function getHelp()
@@ -52,7 +52,7 @@ HELP;
 	protected function doExecute(): int
 	{
 		if ($this->getOption('v')) {
-			$this->out('Class: ' . __CLASS__);
+			$this->out('Class: ' . self::class);
 			$this->out('Arguments: ' . var_export($this->args, true));
 			$this->out('Options: ' . var_export($this->options, true));
 		}
@@ -66,7 +66,8 @@ HELP;
 			throw new \Asika\SimpleConsole\CommandArgsException('Too many arguments');
 		}
 
-		$a = $this->app;
+		$a          = new stdClass();
+		$a->strings = [];
 
 		$phpfile = realpath($this->getArgument(0));
 
@@ -98,9 +99,9 @@ HELP;
 		$out .= '"Content-Transfer-Encoding: 8bit\n"' . "\n";
 
 		// search for plural info
-		$lang = "";
+		$lang       = "";
 		$lang_logic = "";
-		$lang_pnum = $this->getOption('p', 2);
+		$lang_pnum  = $this->getOption('p', 2);
 
 		$infile = file($phpfile);
 		foreach ($infile as $l) {
@@ -126,27 +127,27 @@ HELP;
 
 		// load base messages.po and extract msgids
 		$base_msgids = [];
-		$base_f = file($base_path);
+		$base_f      = file($base_path);
 		if (!$base_f) {
 			throw new \RuntimeException('The base ' . $base_path . ' file is missing or unavailable to read.');
 		}
 
 		$this->out('Loading base file ' . $base_path . '...');
 
-		$_f = 0;
-		$_mid = "";
+		$_f    = 0;
+		$_mid  = "";
 		$_mids = [];
 		foreach ($base_f as $l) {
 			$l = trim($l);
 
 			if ($this->startsWith($l, 'msgstr')) {
 				if ($_mid != '""') {
-					$base_msgids[$_mid] = $_mids;
+					$base_msgids[$_mid]                                               = $_mids;
 					$this->normBaseMsgIds[preg_replace(self::NORM_REGEXP, "", $_mid)] = $_mid;
 				}
 
-				$_f = 0;
-				$_mid = "";
+				$_f    = 0;
+				$_mid  = "";
 				$_mids = [];
 			}
 
@@ -154,7 +155,7 @@ HELP;
 				$_mids[count($_mids) - 1] .= "\n" . $l;
 			}
 			if ($this->startsWith($l, 'msgid_plural ')) {
-				$_f = 2;
+				$_f      = 2;
 				$_mids[] = str_replace('msgid_plural ', '', $l);
 			}
 
@@ -163,8 +164,8 @@ HELP;
 				$_mids[count($_mids) - 1] .= "\n" . $l;
 			}
 			if ($this->startsWith($l, 'msgid ')) {
-				$_f = 1;
-				$_mid = str_replace('msgid ', '', $l);
+				$_f    = 1;
+				$_mid  = str_replace('msgid ', '', $l);
 				$_mids = [$_mid];
 			}
 		}
@@ -213,7 +214,7 @@ HELP;
 	private function startsWith($haystack, $needle)
 	{
 		// search backwards starting from haystack length characters from the end
-		return $needle === "" || strrpos($haystack, $needle, -strlen($haystack)) !== FALSE;
+		return $needle === "" || strrpos($haystack, (string) $needle, -strlen($haystack)) !== false;
 	}
 
 	/**

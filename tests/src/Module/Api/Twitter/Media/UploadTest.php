@@ -13,10 +13,10 @@ use Friendica\Module\Api\Twitter\Media\Upload;
 use Friendica\Network\HTTPException\BadRequestException;
 use Friendica\Network\HTTPException\InternalServerErrorException;
 use Friendica\Network\HTTPException\UnauthorizedException;
-use Friendica\Test\src\Module\Api\ApiTest;
+use Friendica\Test\ApiTestCase;
 use Friendica\Test\Util\AuthTestConfig;
 
-class UploadTest extends ApiTest
+class UploadTest extends ApiTestCase
 {
 	protected function setUp(): void
 	{
@@ -32,7 +32,7 @@ class UploadTest extends ApiTest
 	{
 		$this->expectException(BadRequestException::class);
 
-		(new Upload(DI::mstdnError(), DI::app(), DI::l10n(), DI::baseUrl(), DI::args(), DI::logger(), DI::profiler(), DI::apiResponse(), []))
+		(new Upload(DI::mstdnError(), DI::appHelper(), DI::l10n(), DI::baseUrl(), DI::args(), DI::logger(), DI::profiler(), DI::apiResponse(), []))
 			->run($this->httpExceptionMock);
 	}
 
@@ -46,8 +46,16 @@ class UploadTest extends ApiTest
 		$this->expectException(UnauthorizedException::class);
 		AuthTestConfig::$authenticated = false;
 
-		(new Upload(DI::mstdnError(), DI::app(), DI::l10n(), DI::baseUrl(), DI::args(), DI::logger(), DI::profiler(), DI::apiResponse(), []))
-			->run($this->httpExceptionMock);
+		(new class (DI::mstdnError(), DI::appHelper(), DI::l10n(), DI::baseUrl(), DI::args(), DI::logger(), DI::profiler(), DI::apiResponse(), []) extends Upload {
+			public function jsonError(int $httpCode, $content, string $content_type = 'application/json')
+			{
+				if ($httpCode === 401) {
+					throw new UnauthorizedException(json_encode($content));
+				}
+
+				parent::jsonError($httpCode, $content, $content_type);
+			}
+		})->run($this->httpExceptionMock);
 	}
 
 	/**
@@ -61,11 +69,11 @@ class UploadTest extends ApiTest
 		$_FILES = [
 			'media' => [
 				'id'       => 666,
-				'tmp_name' => 'tmp_name'
-			]
+				'tmp_name' => 'tmp_name',
+			],
 		];
 
-		(new Upload(DI::mstdnError(), DI::app(), DI::l10n(), DI::baseUrl(), DI::args(), DI::logger(), DI::profiler(), DI::apiResponse(), []))
+		(new Upload(DI::mstdnError(), DI::appHelper(), DI::l10n(), DI::baseUrl(), DI::args(), DI::logger(), DI::profiler(), DI::apiResponse(), []))
 			->run($this->httpExceptionMock);
 	}
 
@@ -84,11 +92,11 @@ class UploadTest extends ApiTest
 				'height'   => 666,
 				'tmp_name' => $this->getTempImage(),
 				'name'     => 'spacer.png',
-				'type'     => 'image/png'
-			]
+				'type'     => 'image/png',
+			],
 		];
 
-		$response = (new Upload(DI::mstdnError(), DI::app(), DI::l10n(), DI::baseUrl(), DI::args(), DI::logger(), DI::profiler(), DI::apiResponse(), []))
+		$response = (new Upload(DI::mstdnError(), DI::appHelper(), DI::l10n(), DI::baseUrl(), DI::args(), DI::logger(), DI::profiler(), DI::apiResponse(), []))
 			->run($this->httpExceptionMock);
 
 		$media = $this->toJson($response);

@@ -15,9 +15,8 @@ use Friendica\Core\Cache\Enum;
  */
 class ArrayCache extends AbstractCache implements ICanCacheInMemory
 {
-	const NAME = 'array';
-
 	use CompareDeleteTrait;
+	public const NAME = 'array';
 
 	/** @var array Array with the cached data */
 	protected $cachedData = [];
@@ -35,10 +34,7 @@ class ArrayCache extends AbstractCache implements ICanCacheInMemory
 	 */
 	public function get(string $key)
 	{
-		if (isset($this->cachedData[$key])) {
-			return $this->cachedData[$key];
-		}
-		return null;
+		return $this->cachedData[$key] ?? null;
 	}
 
 	/**
@@ -95,5 +91,11 @@ class ArrayCache extends AbstractCache implements ICanCacheInMemory
 		} else {
 			return false;
 		}
+	}
+
+	/** {@inheritDoc} */
+	public function getStats(): array
+	{
+		return [];
 	}
 }

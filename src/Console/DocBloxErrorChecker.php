@@ -7,7 +7,7 @@
 
 namespace Friendica\Console;
 
-use Friendica\App;
+use Friendica\AppHelper;
 
 /**
  * When I installed docblox, I had the experience that it does not generate any output at all.
@@ -30,17 +30,16 @@ use Friendica\App;
  */
 class DocBloxErrorChecker extends \Asika\SimpleConsole\Console
 {
-
 	protected $helpOptions = ['h', 'help', '?'];
 
-	/** @var App */
-	private $app;
+	/** @var string */
+	private $basePath;
 
-	public function __construct(App $app, array $argv = null)
+	public function __construct(AppHelper $appHelper, array $argv = null)
 	{
 		parent::__construct($argv);
 
-		$this->app = $app;
+		$this->basePath = $appHelper->getBasePath();
 	}
 
 	protected function getHelp()
@@ -60,7 +59,7 @@ HELP;
 	protected function doExecute(): int
 	{
 		if ($this->getOption('v')) {
-			$this->out('Class: ' . __CLASS__);
+			$this->out('Class: ' . self::class);
 			$this->out('Arguments: ' . var_export($this->args, true));
 			$this->out('Options: ' . var_export($this->options, true));
 		}
@@ -73,7 +72,7 @@ HELP;
 			throw new \RuntimeException('DocBlox isn\'t available.');
 		}
 
-		$dir = $this->app->getBasePath();
+		$dir = $this->basePath;
 
 		//stack for dirs to search
 		$dirstack = [];
@@ -108,7 +107,7 @@ HELP;
 
 		//check half of the set and discard if that half is okay
 		$res = $filelist;
-		$i = count($res);
+		$i   = count($res);
 		do {
 			$this->out($i . '/' . count($filelist) . ' elements remaining.');
 			$res = $this->reduce($res, count($res) / 2);
@@ -135,7 +134,7 @@ HELP;
 
 	private function commandExists($command)
 	{
-		$prefix = strpos(strtolower(PHP_OS),'win') > -1 ? 'where' : 'which';
+		$prefix = strpos(strtolower(PHP_OS), 'win') > -1 ? 'where' : 'which';
 		exec("{$prefix} {$command}", $output, $returnVal);
 		return $returnVal === 0;
 	}

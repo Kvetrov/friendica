@@ -7,7 +7,6 @@
 
 namespace Friendica\Core\Config\Util;
 
-use Friendica\Core\Addon;
 use Friendica\Core\Config\Exception\ConfigFileException;
 use Friendica\Core\Config\ValueObject\Cache;
 
@@ -26,26 +25,27 @@ class ConfigFileManager
 	 *
 	 * @var string
 	 */
-	const CONFIG_HTCONFIG = 'htconfig';
+	public const CONFIG_HTCONFIG = 'htconfig';
 
 	/**
 	 * The config file, where overrides per admin page/console are saved at
 	 *
 	 * @var string
 	 */
-	const CONFIG_DATA_FILE = 'node.config.php';
+	public const CONFIG_DATA_FILE = 'node.config.php';
 
 	/**
 	 * The sample string inside the configs, which shouldn't get loaded
 	 *
 	 * @var string
 	 */
-	const SAMPLE_END = '-sample';
+	public const SAMPLE_END = '-sample';
 
 	/**
 	 * @var string
 	 */
 	private $baseDir;
+	private string $addonDir;
 	/**
 	 * @var string
 	 */
@@ -65,9 +65,10 @@ class ConfigFileManager
 	 * @param string $configDir
 	 * @param string $staticDir
 	 */
-	public function __construct(string $baseDir, string $configDir, string $staticDir, array $server = [])
+	public function __construct(string $baseDir, string $addonDir, string $configDir, string $staticDir, array $server = [])
 	{
 		$this->baseDir   = $baseDir;
+		$this->addonDir  = $addonDir;
 		$this->configDir = $configDir;
 		$this->staticDir = $staticDir;
 		$this->server    = $server;
@@ -122,7 +123,7 @@ class ConfigFileManager
 
 		if (file_exists($configName)) {
 			return $this->loadConfigFile($configName);
-		} else if (file_exists($iniName)) {
+		} elseif (file_exists($iniName)) {
 			return $this->loadINIConfigFile($iniName);
 		} else {
 			return [];
@@ -160,17 +161,16 @@ class ConfigFileManager
 	 */
 	public function loadAddonConfig(string $name): array
 	{
-		$filepath = $this->baseDir . DIRECTORY_SEPARATOR .   // /var/www/html/
-					Addon::DIRECTORY . DIRECTORY_SEPARATOR . // addon/
-					$name . DIRECTORY_SEPARATOR .            // openstreetmap/
-					'config' . DIRECTORY_SEPARATOR .         // config/
-					$name . ".config.php";                   // openstreetmap.config.php
+		$filepath = $this->addonDir . DIRECTORY_SEPARATOR // /var/www/html/addon/
+					. $name . DIRECTORY_SEPARATOR           // openstreetmap/
+					. 'config' . DIRECTORY_SEPARATOR        // config/
+					. $name . ".config.php";                  // openstreetmap.config.php
 
-		if (file_exists($filepath)) {
-			return $this->loadConfigFile($filepath);
-		} else {
+		if (!file_exists($filepath)) {
 			return [];
 		}
+
+		return $this->loadConfigFile($filepath);
 	}
 
 	/**
@@ -182,8 +182,8 @@ class ConfigFileManager
 	 */
 	protected function loadEnvConfig(): array
 	{
-		$filepath = $this->staticDir . DIRECTORY_SEPARATOR .   // /var/www/html/static/
-					"env.config.php";                          // env.config.php
+		$filepath = $this->staticDir . DIRECTORY_SEPARATOR   // /var/www/html/static/
+					. "env.config.php";                          // env.config.php
 
 		if (!file_exists($filepath)) {
 			return [];
@@ -220,9 +220,9 @@ class ConfigFileManager
 		$sampleEnd = self::SAMPLE_END . ($ini ? '.ini.php' : '.config.php');
 
 		foreach ($files as $filename) {
-			if (fnmatch($filePattern, $filename) &&
-				substr_compare($filename, $sampleEnd, -strlen($sampleEnd)) &&
-				$filename !== self::CONFIG_DATA_FILE) {
+			if (fnmatch($filePattern, $filename)
+				&& substr_compare($filename, $sampleEnd, -strlen($sampleEnd))
+				&& $filename !== self::CONFIG_DATA_FILE) {
 				$found[] = $this->configDir . '/' . $filename;
 			}
 		}
@@ -245,59 +245,61 @@ class ConfigFileManager
 		$fullName = $this->baseDir . DIRECTORY_SEPARATOR . '.' . $name . '.php';
 
 		$config = [];
-		if (file_exists($fullName)) {
-			$a         = new \stdClass();
-			$a->config = [];
-			include $fullName;
+		if (!file_exists($fullName)) {
+			return $config;
+		}
 
-			$htConfigCategories = array_keys($a->config);
+		$a         = new \stdClass();
+		$a->config = [];
+		include $fullName;
 
-			// map the legacy configuration structure to the current structure
-			foreach ($htConfigCategories as $htConfigCategory) {
-				if (is_array($a->config[$htConfigCategory])) {
-					$keys = array_keys($a->config[$htConfigCategory]);
+		$htConfigCategories = array_keys($a->config);
 
-					foreach ($keys as $key) {
-						$config[$htConfigCategory][$key] = $a->config[$htConfigCategory][$key];
-					}
-				} else {
-					$config['config'][$htConfigCategory] = $a->config[$htConfigCategory];
+		// map the legacy configuration structure to the current structure
+		foreach ($htConfigCategories as $htConfigCategory) {
+			if (is_array($a->config[$htConfigCategory])) {
+				$keys = array_keys($a->config[$htConfigCategory]);
+
+				foreach ($keys as $key) {
+					$config[$htConfigCategory][$key] = $a->config[$htConfigCategory][$key];
 				}
+			} else {
+				$config['config'][$htConfigCategory] = $a->config[$htConfigCategory];
 			}
+		}
 
-			unset($a);
+		unset($a);
 
-			if (isset($db_host)) {
-				$config['database']['hostname'] = $db_host;
-				unset($db_host);
-			}
-			if (isset($db_user)) {
-				$config['database']['username'] = $db_user;
-				unset($db_user);
-			}
-			if (isset($db_pass)) {
-				$config['database']['password'] = $db_pass;
-				unset($db_pass);
-			}
-			if (isset($db_data)) {
-				$config['database']['database'] = $db_data;
-				unset($db_data);
-			}
-			if (isset($config['system']['db_charset'])) {
-				$config['database']['charset'] = $config['system']['db_charset'];
-			}
-			if (isset($pidfile)) {
-				$config['system']['pidfile'] = $pidfile;
-				unset($pidfile);
-			}
-			if (isset($default_timezone)) {
-				$config['system']['default_timezone'] = $default_timezone;
-				unset($default_timezone);
-			}
-			if (isset($lang)) {
-				$config['system']['language'] = $lang;
-				unset($lang);
-			}
+		if (isset($db_host)) {
+			$config['database']['hostname'] = $db_host;
+			unset($db_host);
+		}
+		if (isset($db_user)) {
+			$config['database']['username'] = $db_user;
+			unset($db_user);
+		}
+		if (isset($db_pass)) {
+			$config['database']['password'] = $db_pass;
+			unset($db_pass);
+		}
+		if (isset($db_data)) {
+			$config['database']['database'] = $db_data;
+			unset($db_data);
+		}
+		if (isset($config['system']) && isset($config['system']['db_charset'])) {
+			$config['database']['charset'] = $config['system']['db_charset'];
+		}
+		if (isset($pidfile)) {
+			$config['system']['pidfile'] = $pidfile;
+			unset($pidfile);
+		}
+		if (isset($default_timezone)) {
+			$config['system']['default_timezone'] = $default_timezone;
+			unset($default_timezone);
+		}
+		if (isset($lang)) {
+			$config['system']['language'] = $lang;
+			unset($lang);
 		}
 
 		return $config;

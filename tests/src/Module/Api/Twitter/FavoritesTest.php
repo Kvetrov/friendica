@@ -7,13 +7,13 @@
 
 namespace Friendica\Test\src\Module\Api\Twitter;
 
-use Friendica\App\Router;
 use Friendica\Capabilities\ICanCreateResponses;
+use Friendica\Core\Renderer;
 use Friendica\DI;
 use Friendica\Module\Api\Twitter\Favorites;
-use Friendica\Test\src\Module\Api\ApiTest;
+use Friendica\Test\ApiTestCase;
 
-class FavoritesTest extends ApiTest
+class FavoritesTest extends ApiTestCase
 {
 	/**
 	 * Test the api_favorites() function.
@@ -22,7 +22,10 @@ class FavoritesTest extends ApiTest
 	 */
 	public function testApiFavorites()
 	{
-		$response = (new Favorites(DI::mstdnError(), DI::app(), DI::l10n(), DI::baseUrl(), DI::args(), DI::logger(), DI::profiler(), DI::apiResponse(), []))
+		// @todo: This call is needed for this test
+		Renderer::registerTemplateEngine(\Friendica\Render\FriendicaSmartyEngine::class);
+
+		$response = (new Favorites(DI::mstdnError(), DI::appHelper(), DI::l10n(), DI::baseUrl(), DI::args(), DI::logger(), DI::profiler(), DI::apiResponse(), []))
 			->run($this->httpExceptionMock, [
 				'page'   => -1,
 				'max_id' => 10,
@@ -42,13 +45,16 @@ class FavoritesTest extends ApiTest
 	 */
 	public function testApiFavoritesWithRss()
 	{
-		$response = (new Favorites(DI::mstdnError(), DI::app(), DI::l10n(), DI::baseUrl(), DI::args(), DI::logger(), DI::profiler(), DI::apiResponse(), [], [
-			'extension' => ICanCreateResponses::TYPE_RSS
+		// @todo: This call is needed for this test
+		Renderer::registerTemplateEngine(\Friendica\Render\FriendicaSmartyEngine::class);
+
+		$response = (new Favorites(DI::mstdnError(), DI::appHelper(), DI::l10n(), DI::baseUrl(), DI::args(), DI::logger(), DI::profiler(), DI::apiResponse(), [], [
+			'extension' => ICanCreateResponses::TYPE_RSS,
 		]))->run($this->httpExceptionMock);
 
 		self::assertEquals(ICanCreateResponses::TYPE_RSS, $response->getHeaderLine(ICanCreateResponses::X_HEADER));
 
-		self::assertXml((string)$response->getBody(), 'statuses');
+		self::assertXml((string) $response->getBody(), 'statuses');
 	}
 
 	/**

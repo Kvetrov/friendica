@@ -7,7 +7,6 @@
 
 namespace Friendica\Core\Lock\Type;
 
-use Friendica\Core\Cache\Capability\ICanCache;
 use Friendica\Core\Cache\Capability\ICanCacheInMemory;
 use Friendica\Core\Cache\Enum\Duration;
 use Friendica\Core\Cache\Exception\CachePersistenceException;
@@ -16,12 +15,14 @@ use Friendica\Core\Lock\Exception\LockPersistenceException;
 class CacheLock extends AbstractLock
 {
 	/**
-	 * @var string The static prefix of all locks inside the cache
+	 * The static prefix of all locks inside the cache
+	 *
+	 * @var string
 	 */
-	const CACHE_PREFIX = 'lock:';
+	public const CACHE_PREFIX = 'lock:';
 
 	/**
-	 * @var ICanCache;
+	 * @var ICanCacheInMemory
 	 */
 	private $cache;
 
@@ -49,7 +50,7 @@ class CacheLock extends AbstractLock
 			do {
 				$lock = $this->cache->get($lockKey);
 				// When we do want to lock something that was already locked by us.
-				if ((int)$lock == getmypid()) {
+				if ((int) $lock == getmypid()) {
 					$got_lock = true;
 				}
 
@@ -65,7 +66,7 @@ class CacheLock extends AbstractLock
 				}
 
 				if (!$got_lock && ($timeout > 0)) {
-					usleep(rand(10000, 200000));
+					usleep(random_int(10000, 200000));
 				}
 			} while (!$got_lock && ((time() - $start) < $timeout));
 		} catch (CachePersistenceException $exception) {
@@ -152,6 +153,16 @@ class CacheLock extends AbstractLock
 		}
 
 		return $success;
+	}
+
+	/**
+	 * Returns stats about the cache provider
+	 *
+	 * @return array
+	 */
+	public function getCacheStats(): array
+	{
+		return $this->cache->getStats();
 	}
 
 	/**

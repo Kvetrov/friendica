@@ -9,7 +9,7 @@ namespace Friendica\Factory\Api\Mastodon;
 
 use Friendica\BaseFactory;
 use Friendica\Model\Contact;
-use Friendica\Navigation\Notifications;
+use Friendica\Navigation\Notifications\Entity\Notification as NotificationEntity;
 use Friendica\Navigation\Notifications\Exception\UnexpectedNotificationTypeException;
 use Friendica\Object\Api\Mastodon\Notification as MstdnNotification;
 use Friendica\Protocol\Activity;
@@ -32,16 +32,16 @@ class Notification extends BaseFactory
 	}
 
 	/**
-	 * @param Notifications\Entity\Notification $Notification
-	 * @param bool $display_quote Display quoted posts
+	 * @param NotificationEntity $Notification
 	 *
 	 * @return MstdnNotification
 	 * @throws UnexpectedNotificationTypeException
 	 */
-	public function createFromNotification(Notifications\Entity\Notification $Notification, bool $display_quotes): MstdnNotification
+	public function createFromNotification(NotificationEntity $Notification): MstdnNotification
 	{
 		$type = self::getType($Notification);
-		if (empty($type)) {
+
+		if ($type === '') {
 			throw new UnexpectedNotificationTypeException();
 		}
 
@@ -49,7 +49,7 @@ class Notification extends BaseFactory
 
 		if ($Notification->targetUriId) {
 			try {
-				$status = $this->mstdnStatusFactory->createFromUriId($Notification->targetUriId, $Notification->uid, $display_quotes);
+				$status = $this->mstdnStatusFactory->createFromUriId($Notification->targetUriId, $Notification->uid);
 			} catch (\Exception $exception) {
 				$status = null;
 			}
@@ -80,11 +80,11 @@ class Notification extends BaseFactory
 			}
 
 			$type = $contact['pending'] ? MstdnNotification::TYPE_INTRODUCTION : MstdnNotification::TYPE_FOLLOW;
-		} elseif (($Notification->verb == Activity::ANNOUNCE) &&
-			in_array($Notification->type, [Post\UserNotification::TYPE_DIRECT_COMMENT, Post\UserNotification::TYPE_DIRECT_THREAD_COMMENT])) {
+		} elseif (($Notification->verb == Activity::ANNOUNCE)
+			&& in_array($Notification->type, [Post\UserNotification::TYPE_DIRECT_COMMENT, Post\UserNotification::TYPE_DIRECT_THREAD_COMMENT])) {
 			$type = MstdnNotification::TYPE_RESHARE;
-		} elseif (in_array($Notification->verb, [Activity::LIKE, Activity::DISLIKE]) &&
-			in_array($Notification->type, [Post\UserNotification::TYPE_DIRECT_COMMENT, Post\UserNotification::TYPE_DIRECT_THREAD_COMMENT])) {
+		} elseif (in_array($Notification->verb, [Activity::LIKE, Activity::DISLIKE, Activity::EMOJIREACT])
+			&& in_array($Notification->type, [Post\UserNotification::TYPE_DIRECT_COMMENT, Post\UserNotification::TYPE_DIRECT_THREAD_COMMENT])) {
 			$type = MstdnNotification::TYPE_LIKE;
 		} elseif ($Notification->type === Post\UserNotification::TYPE_SHARED) {
 			$type = MstdnNotification::TYPE_POST;
@@ -93,7 +93,7 @@ class Notification extends BaseFactory
 			Post\UserNotification::TYPE_IMPLICIT_TAGGED,
 			Post\UserNotification::TYPE_DIRECT_COMMENT,
 			Post\UserNotification::TYPE_DIRECT_THREAD_COMMENT,
-			Post\UserNotification::TYPE_THREAD_COMMENT
+			Post\UserNotification::TYPE_THREAD_COMMENT,
 		])) {
 			$type = MstdnNotification::TYPE_MENTION;
 		} else {

@@ -11,26 +11,25 @@
 	<div id="photos-usage-message">{{$usage}}</div>
 
 	<form action="profile/{{$nickname}}/photos" enctype="multipart/form-data" method="post" name="photos-upload-form" id="photos-upload-form">
+{{if $is_album_context}}
+		<input type="hidden" id="photos-upload-album-select" name="album" value="{{$preselected_album}}" />
+{{else}}
 		<div id="photos-upload-div" class="form-group">
-			<label id="photos-upload-text" for="photos-upload-newalbum">{{$newalbum}}</label>
-
-			<input id="photos-upload-album-select" class="form-control" placeholder="{{$existalbumtext}}" list="dl-photo-upload" type="text" name="album" size="4">
+			<label for="photos-upload-newalbum">{{$albumtext_label}}</label>
+			<input id="photos-upload-album-select" class="form-control" list="dl-photo-upload" type="text" name="album">
 			<datalist id="dl-photo-upload">
 				{{foreach $albumselect as $value => $name}}
 					<option value="{{$value}}"{{if $selname == $value}} selected{{/if}}>{{$name}}</option>
 				{{/foreach}}
 			</datalist>
+			<p><small>{{$albumtext_description}}</small></p>
 		</div>
 		<div id="photos-upload-end" class="clearfix"></div>
-
-		<div id="photos-upload-noshare-div" class="photos-upload-noshare-div checkbox pull-left">
-			<input id="photos-upload-noshare" type="checkbox" name="not_visible" value="1" checked/>
-			<label id="photos-upload-noshare-text" for="photos-upload-noshare">{{$nosharetext}}</label>
-		</div>
+{{/if}}
 
 		{{if $alt_uploader}}
 			<div id="photos-upload-perms" class="pull-right">
-				<button class="btn btn-default btn-sm" data-toggle="modal" data-target="#aclModal" onclick="return false;">
+				<button class="btn btn-default btn-sm" data-toggle="modal" data-target="#photo-upload-permission-acl" onclick="return false;">
 					<i id="jot-perms-icon" class="fa {{$lockstate}}"></i> {{$permissions}}
 				</button>
 			</div>
@@ -49,7 +48,7 @@
 
 			<div class="photos-upload-wrapper">
 				<div id="photos-upload-perms" class="btn-group pull-right">
-					<button class="btn btn-default" data-toggle="modal" data-target="#aclModal" onclick="return false;">
+					<button class="btn btn-default" data-toggle="modal" data-target="#photo-upload-permission-acl" onclick="return false;">
 						<i id="jot-perms-icon" class="fa {{$lockstate}}"></i>
 					</button>
 
@@ -63,14 +62,14 @@
 		<div class="photos-upload-end" class="clearfix"></div>
 
 		{{* The modal for advanced-expire *}}
-		<div id="aclModal" class="modal fade" tabindex="-1" role="dialog" aria-hidden="true">
+		<div id="photo-upload-permission-acl" class="modal fade" tabindex="-1" role="dialog" aria-hidden="true">
 			<div class="modal-dialog">
 				<div class="modal-content">
-					<div class="modal-header" class="modal-header">
+					<div class="modal-header">
 						<button id="modal-close" type="button" class="close" data-dismiss="modal" aria-hidden="true">
 							&times;
 						</button>
-						<h4 id="modal-title" class="modal-title">{{$permissions}}</h4>
+						<h4 class="modal-title">{{$permissions}}</h4>
 					</div>
 					<div id="photos-upload-permissions-wrapper" class="modal-body">
 						{{$aclselect nofilter}}

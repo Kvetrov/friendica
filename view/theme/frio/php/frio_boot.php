@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Copyright (C) 2010-2024, the Friendica project
  * SPDX-FileCopyrightText: 2010-2024 the Friendica project
@@ -9,7 +10,7 @@
  *
  */
 
-use Friendica\App;
+use Friendica\AppHelper;
 use Friendica\DI;
 
 /**
@@ -17,19 +18,19 @@ use Friendica\DI;
  *
  * @todo Check if this is really needed.
  */
-function load_page(App $a)
+function load_page(AppHelper $appHelper)
 {
 	if (isset($_GET['mode']) && ($_GET['mode'] == 'minimal')) {
 		require 'view/theme/frio/minimal.php';
 	} elseif ((isset($_GET['mode']) && ($_GET['mode'] == 'none'))) {
 		require 'view/theme/frio/none.php';
 	} else {
-		$template = 'view/theme/' . $a->getCurrentTheme() . '/'
-			. ((DI::page()['template'] ?? '') ?: 'default' ) . '.php';
+		$template = 'view/theme/' . $appHelper->getCurrentTheme() . '/'
+			. ((DI::page()['template'] ?? '') ?: 'default') . '.php';
 		if (file_exists($template)) {
 			require_once $template;
 		} else {
-			require_once str_replace('theme/' . $a->getCurrentTheme() . '/', '', $template);
+			require_once str_replace('theme/' . $appHelper->getCurrentTheme() . '/', '', $template);
 		}
 	}
 }
@@ -42,12 +43,13 @@ function load_page(App $a)
  *
  * @return bool
  */
-function is_modal() {
-	$is_modal = false;
+function is_modal()
+{
+	$is_modal   = false;
 	$modalpages = get_modalpage_list();
 
 	foreach ($modalpages as $r => $value) {
-		if(strpos($_REQUEST['pagename'],$value) !== false) {
+		if (strpos($_REQUEST['pagename'], (string) $value) !== false) {
 			$is_modal = true;
 		}
 	}
@@ -63,13 +65,14 @@ function is_modal() {
  *
  * @return array Page names as path
  */
-function get_modalpage_list() {
+function get_modalpage_list()
+{
 	//Array of pages which getting bootstrap modal dialogs
 	$modalpages = [
 		'message/new',
 		'settings/oauth/add',
 		'calendar/event/new',
-//		'fbrowser/image/'
+		//		'fbrowser/image/'
 	];
 
 	return $modalpages;
@@ -83,10 +86,11 @@ function get_modalpage_list() {
  *
  * @return array Pagenames as path
  */
-function get_standard_page_list() {
+function get_standard_page_list()
+{
 	//Arry of pages wich getting the standard page template
 	$standardpages = [//'profile',
-//			'fbrowser/image/'
+		//			'fbrowser/image/'
 	];
 
 	return $standardpages;
@@ -101,12 +105,13 @@ function get_standard_page_list() {
  * @param string $pagetitle Title of the actual page
  * @return bool
  */
-function is_standard_page($pagetitle) {
+function is_standard_page($pagetitle)
+{
 	$is_standard_page = false;
-	$standardpages = get_standard_page_list();
+	$standardpages    = get_standard_page_list();
 
 	foreach ($standardpages as $r => $value) {
-		if(strpos($pagetitle,$value) !== false) {
+		if (strpos($pagetitle, (string) $value) !== false) {
 			$is_standard_page = true;
 		}
 	}
@@ -119,16 +124,20 @@ function is_standard_page($pagetitle) {
  * @param type $pagetitle
  * @return string
  */
-function get_page_type($pagetitle) {
+function get_page_type($pagetitle)
+{
 	$page_type = "";
 
-	if(is_modal())
+	if (is_modal()) {
 		$page_type = "modal";
+	}
 
-	if(is_standard_page($pagetitle))
+	if (is_standard_page($pagetitle)) {
 		$page_type = "standard_page";
+	}
 
-	if($page_type)
+	if ($page_type) {
 		return $page_type;
+	}
 
 }

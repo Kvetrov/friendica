@@ -7,6 +7,7 @@
 
 namespace Friendica\Test\src\Factory\Api\Twitter;
 
+use Friendica\Core\Renderer;
 use Friendica\DI;
 use Friendica\Factory\Api\Friendica\Activities;
 use Friendica\Factory\Api\Twitter\Attachment;
@@ -15,10 +16,10 @@ use Friendica\Factory\Api\Twitter\Media;
 use Friendica\Factory\Api\Twitter\Mention;
 use Friendica\Factory\Api\Twitter\Status;
 use Friendica\Factory\Api\Twitter\Url;
-use Friendica\Test\FixtureTest;
-use Friendica\Test\src\Module\Api\ApiTest;
+use Friendica\Test\ApiTestCase;
+use Friendica\Test\FixtureTestCase;
 
-class StatusTest extends FixtureTest
+class StatusTest extends FixtureTestCase
 {
 	protected $statusFactory;
 
@@ -35,7 +36,9 @@ class StatusTest extends FixtureTest
 			new Url(DI::logger()),
 			new Mention(DI::logger(), DI::baseUrl()),
 			new Activities(DI::logger(), DI::twitterUser()),
-			new Attachment(DI::logger()), DI::contentItem());
+			new Attachment(DI::logger()),
+			DI::contentItem(),
+		);
 	}
 
 	/**
@@ -46,7 +49,7 @@ class StatusTest extends FixtureTest
 	public function testApiConvertItem()
 	{
 		$status = $this->statusFactory
-			->createFromItemId(13, ApiTest::SELF_USER['id'])
+			->createFromItemId(13, ApiTestCase::SELF_USER['id'])
 			->toArray();
 
 		self::assertStringStartsWith('item_title', $status['text']);
@@ -107,7 +110,7 @@ class StatusTest extends FixtureTest
 	public function testApiGetEntitiesWithIncludeEntities()
 	{
 		$status = $this->statusFactory
-			->createFromItemId(13, ApiTest::SELF_USER['id'], true)
+			->createFromItemId(13, ApiTestCase::SELF_USER['id'], true)
 			->toArray();
 
 		self::assertIsArray($status['entities']);
@@ -123,10 +126,13 @@ class StatusTest extends FixtureTest
 	 */
 	public function testApiFormatItems()
 	{
+		// @todo: This call is needed for this test
+		Renderer::registerTemplateEngine(\Friendica\Render\FriendicaSmartyEngine::class);
+
 		$posts = DI::dba()->selectToArray('post-view', ['uri-id']);
 		foreach ($posts as $item) {
 			$status = $this->statusFactory
-				->createFromUriId($item['uri-id'], ApiTest::SELF_USER['id'])
+				->createFromUriId($item['uri-id'], ApiTestCase::SELF_USER['id'])
 				->toArray();
 
 			self::assertIsInt($status['id']);

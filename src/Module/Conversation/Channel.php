@@ -14,6 +14,7 @@ use Friendica\Content\Conversation;
 use Friendica\Content\Conversation\Entity\Channel as ChannelEntity;
 use Friendica\Content\Conversation\Factory\UserDefinedChannel as UserDefinedChannelFactory;
 use Friendica\Content\Conversation\Factory\Timeline as TimelineFactory;
+use Friendica\Content\Conversation\Factory\Activity as ActivityFactory;
 use Friendica\Content\Conversation\Repository\UserDefinedChannel as ChannelRepository;
 use Friendica\Content\Conversation\Factory\Channel as ChannelFactory;
 use Friendica\Content\Conversation\Factory\Community as CommunityFactory;
@@ -56,9 +57,9 @@ class Channel extends Timeline
 	/** @var NetworkFactory */
 	protected $networkFactory;
 
-	public function __construct(UserDefinedChannelFactory $userDefinedChannel, NetworkFactory $network, CommunityFactory $community, ChannelFactory $channelFactory, ChannelRepository $channel, TimelineFactory $timeline, Conversation $conversation, App\Page $page, SystemMessages $systemMessages, Mode $mode, IHandleUserSessions $session, Database $database, IManagePersonalConfigValues $pConfig, IManageConfigValues $config, ICanCache $cache, L10n $l10n, App\BaseURL $baseUrl, App\Arguments $args, LoggerInterface $logger, Profiler $profiler, Response $response, array $server, array $parameters = [])
+	public function __construct(UserDefinedChannelFactory $userDefinedChannel, NetworkFactory $network, CommunityFactory $community, ChannelFactory $channelFactory, ChannelRepository $channel, TimelineFactory $timeline, Conversation $conversation, App\Page $page, SystemMessages $systemMessages, Mode $mode, IHandleUserSessions $session, Database $database, IManagePersonalConfigValues $pConfig, IManageConfigValues $config, ICanCache $cache, ActivityFactory $ActivityFactory, L10n $l10n, App\BaseURL $baseUrl, App\Arguments $args, LoggerInterface $logger, Profiler $profiler, Response $response, array $server, array $parameters = [])
 	{
-		parent::__construct($channel, $mode, $session, $database, $pConfig, $config, $cache, $l10n, $baseUrl, $args, $logger, $profiler, $response, $server, $parameters);
+		parent::__construct($channel, $mode, $session, $database, $pConfig, $config, $cache, $ActivityFactory, $l10n, $baseUrl, $args, $logger, $profiler, $response, $server, $parameters);
 
 		$this->timeline           = $timeline;
 		$this->conversation       = $conversation;
@@ -84,18 +85,13 @@ class Channel extends Timeline
 			'$header'  => '',
 		]);
 
-		if ($this->pConfig->get($this->session->getLocalUserId(), 'system', 'infinite_scroll')) {
-			$tpl = Renderer::getMarkupTemplate('infinite_scroll_head.tpl');
-			$o .= Renderer::replaceMacros($tpl, ['$reload_uri' => $this->args->getQueryString()]);
-		}
-
 		if (!$this->raw) {
 			$tabs = $this->getTabArray($this->channel->getTimelines($this->session->getLocalUserId()), 'channel');
 			$tabs = array_merge($tabs, $this->getTabArray($this->channelRepository->selectByUid($this->session->getLocalUserId()), 'channel'));
 			$tabs = array_merge($tabs, $this->getTabArray($this->community->getTimelines(true), 'channel'));
 
 			$tab_tpl = Renderer::getMarkupTemplate('common_tabs.tpl');
-			$o .= Renderer::replaceMacros($tab_tpl, ['$tabs' => $tabs]);
+			$o .= Renderer::replaceMacros($tab_tpl, ['$tabs' => $tabs, '$more' => $this->l10n->t('More')]);
 
 			Nav::setSelected('channel');
 
@@ -126,18 +122,18 @@ class Channel extends Timeline
 			return $o;
 		}
 
-		$o .= $this->conversation->render($items, Conversation::MODE_CHANNEL, false, false, $order, $this->session->getLocalUserId());
+		$o .= $this->conversation->render($items, Conversation::MODE_CHANNEL, $this->raw, false, $order, $this->session->getLocalUserId());
 
 		$pager = new BoundariesPager(
 			$this->l10n,
 			$this->args->getQueryString(),
-			$items[0][$order],
-			$items[count($items) - 1][$order],
-			$this->itemsPerPage
+			$items[array_key_first($items)][$order],
+			$items[array_key_last($items)][$order],
+			$this->itemsPerPage,
 		);
 
-		if ($this->pConfig->get($this->session->getLocalUserId(), 'system', 'infinite_scroll')) {
-			$o .= HTML::scrollLoader();
+		if ($this->pConfig->get($this->session->getLocalUserId(), 'system', 'infinite_scroll', true)) {
+			$o .= HTML::scrollLoader($request);
 		} else {
 			$o .= $pager->renderMinimal(count($items));
 		}
@@ -163,7 +159,7 @@ class Channel extends Timeline
 			throw new HTTPException\BadRequestException($this->l10n->t('Channel not available.'));
 		}
 
-		$this->maxId = $request['last_created'] ?? $this->maxId;
+		$this->maxId = $request['last_created']  ?? $this->maxId;
 		$this->minId = $request['first_created'] ?? $this->minId;
 	}
 }

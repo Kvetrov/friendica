@@ -7,7 +7,9 @@
 
 namespace Friendica\Module\Notifications;
 
-use Friendica\App;
+use Friendica\App\Arguments;
+use Friendica\App\BaseURL;
+use Friendica\AppHelper;
 use Friendica\BaseModule;
 use Friendica\Contact\Introduction\Repository\Introduction;
 use Friendica\Content\GroupManager;
@@ -60,10 +62,10 @@ class Ping extends BaseModule
 	private $cache;
 	/** @var Repository\Notify */
 	private $notify;
-	/** @var App */
-	private $app;
+	/** @var AppHelper */
+	private $appHelper;
 
-	public function __construct(App $app, Repository\Notify $notify, ICanCache $cache, Database $database, IManagePersonalConfigValues $pconfig, IManageConfigValues $config, IHandleUserSessions $session, SystemMessages $systemMessages, Repository\Notification $notificationRepo, Introduction $introductionRepo, Factory\FormattedNavNotification $formattedNavNotification, L10n $l10n, App\BaseURL $baseUrl, App\Arguments $args, LoggerInterface $logger, Profiler $profiler, Response $response, array $server, array $parameters = [])
+	public function __construct(AppHelper $appHelper, Repository\Notify $notify, ICanCache $cache, Database $database, IManagePersonalConfigValues $pconfig, IManageConfigValues $config, IHandleUserSessions $session, SystemMessages $systemMessages, Repository\Notification $notificationRepo, Introduction $introductionRepo, Factory\FormattedNavNotification $formattedNavNotification, L10n $l10n, BaseURL $baseUrl, Arguments $args, LoggerInterface $logger, Profiler $profiler, Response $response, array $server, array $parameters = [])
 	{
 		parent::__construct($l10n, $baseUrl, $args, $logger, $profiler, $response, $server, $parameters);
 
@@ -77,7 +79,7 @@ class Ping extends BaseModule
 		$this->database                 = $database;
 		$this->cache                    = $cache;
 		$this->notify                   = $notify;
-		$this->app                      = $app;
+		$this->appHelper                = $appHelper;
 	}
 
 	protected function rawContent(array $request = [])
@@ -90,7 +92,7 @@ class Ping extends BaseModule
 		$home_count      = 0;
 		$register_count  = 0;
 		$sysnotify_count = 0;
-		$circles_unseen   = [];
+		$circles_unseen  = [];
 		$groups_unseen   = [];
 
 		$event_count          = 0;
@@ -108,12 +110,12 @@ class Ping extends BaseModule
 
 			$condition = [
 				"`unseen` AND `uid` = ? AND NOT `origin` AND `wall` AND (`vid` != ? OR `vid` IS NULL)",
-				$this->session->getLocalUserId(), Verb::getID(Activity::FOLLOW)
+				$this->session->getLocalUserId(), Verb::getID(Activity::FOLLOW),
 			];
 
 			$home_count = Post::count($condition);
 
-			if ($this->config->get('system','compute_circle_counts')) {
+			if ($this->config->get('system', 'compute_circle_counts')) {
 				// Find out how unseen network posts are spread across circles
 				foreach (Circle::countUnseen($this->session->getLocalUserId()) as $circle_count) {
 					if ($circle_count['count'] > 0) {
@@ -136,16 +138,19 @@ class Ping extends BaseModule
 			$mail_count = $this->database->count('mail', ["`uid` = ? AND NOT `seen` AND `from-url` != ?", $this->session->getLocalUserId(), $myurl]);
 
 			if (Register::getPolicy() === Register::APPROVE && $this->session->isSiteAdmin()) {
-				$registrations = \Friendica\Model\Register::getPending();
+				$registrations  = \Friendica\Model\Register::getPending();
 				$register_count = count($registrations);
 			}
 
 			$cachekey = 'ping:events:' . $this->session->getLocalUserId();
 			$events   = $this->cache->get($cachekey);
 			if (is_null($events)) {
-				$events = $this->database->selectToArray('event', ['type', 'start'],
+				$events = $this->database->selectToArray(
+					'event',
+					['type', 'start'],
 					["`uid` = ? AND `start` < ? AND `finish` > ? AND NOT `ignore`",
-						$this->session->getLocalUserId(), DateTimeFormat::utc('now + 7 days'), DateTimeFormat::utcNow()]);
+						$this->session->getLocalUserId(), DateTimeFormat::utc('now + 7 days'), DateTimeFormat::utcNow()],
+				);
 				$this->cache->set($cachekey, $events, Duration::HOUR);
 			}
 
@@ -205,7 +210,7 @@ class Ping extends BaseModule
 						$registration['url'],
 						$this->l10n->t('{0} requested registration'),
 						new \DateTime($registration['created'], new \DateTimeZone('UTC')),
-						new Uri($this->baseUrl . '/moderation/users/pending')
+						new Uri($this->baseUrl . '/moderation/users/pending'),
 					);
 				}
 			} else {
@@ -214,7 +219,7 @@ class Ping extends BaseModule
 					$registrations[0]['url'],
 					$this->l10n->t('{0} and %d others requested registration', count($registrations) - 1),
 					new \DateTime($registrations[0]['created'], new \DateTimeZone('UTC')),
-					new Uri($this->baseUrl . '/moderation/users/pending')
+					new Uri($this->baseUrl . '/moderation/users/pending'),
 				);
 			}
 
@@ -225,11 +230,7 @@ class Ping extends BaseModule
 
 				// Unseen messages are kept at the top
 				if ($a['seen'] == $b['seen']) {
-					if ($a['timestamp'] == $b['timestamp']) {
-						return 0;
-					} else {
-						return $a['timestamp'] < $b['timestamp'] ? 1 : -1;
-					}
+					return $b['timestamp'] <=> $a['timestamp'];
 				} else {
 					return $a['seen'] ? 1 : -1;
 				}

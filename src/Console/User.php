@@ -8,7 +8,7 @@
 namespace Friendica\Console;
 
 use Console_Table;
-use Friendica\App;
+use Friendica\App\Mode;
 use Friendica\Content\Pager;
 use Friendica\Core\L10n;
 use Friendica\Core\PConfig\Capability\IManagePersonalConfigValues;
@@ -26,7 +26,7 @@ class User extends \Asika\SimpleConsole\Console
 	protected $helpOptions = ['h', 'help', '?'];
 
 	/**
-	 * @var App\Mode
+	 * @var Mode
 	 */
 	private $appMode;
 	/**
@@ -74,7 +74,7 @@ HELP;
 		return $help;
 	}
 
-	public function __construct(App\Mode $appMode, L10n $l10n, IManagePersonalConfigValues $pConfig, array $argv = null)
+	public function __construct(Mode $appMode, L10n $l10n, IManagePersonalConfigValues $pConfig, array $argv = null)
 	{
 		parent::__construct($argv);
 
@@ -86,7 +86,7 @@ HELP;
 	protected function doExecute(): int
 	{
 		if ($this->getOption('v')) {
-			$this->out('Class: ' . __CLASS__);
+			$this->out('Class: ' . self::class);
 			$this->out('Arguments: ' . var_export($this->args, true));
 			$this->out('Options: ' . var_export($this->options, true));
 		}
@@ -106,23 +106,23 @@ HELP;
 			case 'password':
 				return $this->password();
 			case 'add':
-				return $this->addUser();
+				return ($this->addUser()) ? 0 : 1;
 			case 'allow':
-				return $this->pendingUser(true);
+				return ($this->pendingUser(true)) ? 0 : 1;
 			case 'deny':
-				return $this->pendingUser(false);
+				return ($this->pendingUser(false)) ? 0 : 1;
 			case 'block':
-				return $this->blockUser(true);
+				return ($this->blockUser(true)) ? 0 : 1;
 			case 'unblock':
-				return $this->blockUser(false);
+				return ($this->blockUser(false)) ? 0 : 1;
 			case 'delete':
-				return $this->deleteUser();
+				return ($this->deleteUser()) ? 0 : 1;
 			case 'list':
-				return $this->listUser();
+				return ($this->listUser()) ? 0 : 1;
 			case 'search':
-				return $this->searchUser();
+				return ($this->searchUser()) ? 0 : 1;
 			case 'config':
-				return $this->configUser();
+				return ($this->configUser()) ? 0 : 1;
 			default:
 				throw new \Asika\SimpleConsole\CommandArgsException('Wrong command.');
 		}
@@ -178,7 +178,7 @@ HELP;
 	 *
 	 * @throws \Exception
 	 */
-	private function password()
+	private function password(): int
 	{
 		$user = $this->getUserByNick(1);
 
@@ -212,7 +212,7 @@ HELP;
 	 * @throws \Friendica\Network\HTTPException\InternalServerErrorException
 	 * @throws \ImagickException
 	 */
-	private function addUser()
+	private function addUser(): bool
 	{
 		$name   = $this->getArgument(1);
 		$nick   = $this->getArgument(2);
@@ -490,9 +490,9 @@ HELP;
 					}
 				}
 
-				if (array_key_exists($category, $values) and
-					array_key_exists($key, $values[$category]) and
-					$values[$category][$key] == $value) {
+				if (array_key_exists($category, $values)
+					and array_key_exists($key, $values[$category])
+					and $values[$category][$key] == $value) {
 					throw new RuntimeException('Value not changed');
 				}
 
@@ -512,5 +512,7 @@ HELP;
 				$this->out($this->getHelp());
 				return false;
 		}
+
+		return true;
 	}
 }

@@ -4,13 +4,12 @@
   *
   * SPDX-License-Identifier: AGPL-3.0-or-later
   *}}
-<div id="message-sidebar" class="widget">
-	{{if $tabs}}
-	<div id="message-preview" class="panel panel-default">
-		<ul class="media-list">
-		{{$tabs nofilter}}
-		</ul>
-	</div>
-	{{/if}}
-
-</div>
+{{if $tabs}}
+	<nav id="message-sidebar" class="widget">
+		<div id="message-preview" class="panel panel-default">
+			<ul class="media-list">
+				{{$tabs nofilter}}
+			</ul>
+		</div>
+	</nav>
+{{/if}}

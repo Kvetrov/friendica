@@ -8,6 +8,8 @@
 namespace Friendica\Core;
 
 use Friendica\Database\DBA;
+use Friendica\DI;
+use Friendica\Event\ArrayFilterEvent;
 use Friendica\Model\User;
 use Friendica\Network\HTTPException;
 use Friendica\Protocol\ActivityPub;
@@ -20,43 +22,43 @@ use Friendica\Protocol\Diaspora;
 class Protocol
 {
 	// Native support
-	const ACTIVITYPUB = 'apub';    // ActivityPub (Pleroma, Mastodon, Osada, ...)
-	const DFRN        = 'dfrn';    // Friendica, Mistpark, other DFRN implementations
-	const DIASPORA    = 'dspr';    // Diaspora, Hubzilla, Socialhome, Ganggo
-	const FEED        = 'feed';    // RSS/Atom feeds with no known "post/notify" protocol
-	const MAIL        = 'mail';    // IMAP/POP
+	public const ACTIVITYPUB = 'apub';    // ActivityPub (Pleroma, Mastodon, Osada, ...)
+	public const DFRN        = 'dfrn';    // Friendica, Mistpark, other DFRN implementations
+	public const DIASPORA    = 'dspr';    // Diaspora, Hubzilla, Socialhome, Ganggo
+	public const FEED        = 'feed';    // RSS/Atom feeds with no known "post/notify" protocol
+	public const MAIL        = 'mail';    // IMAP/POP
 
-	const NATIVE_SUPPORT = [self::DFRN, self::DIASPORA, self::FEED, self::MAIL, self::ACTIVITYPUB];
+	public const NATIVE_SUPPORT = [self::DFRN, self::DIASPORA, self::FEED, self::MAIL, self::ACTIVITYPUB];
 
-	const FEDERATED = [self::DFRN, self::DIASPORA, self::ACTIVITYPUB];
+	public const FEDERATED = [self::DFRN, self::DIASPORA, self::ACTIVITYPUB];
 
-	const SUPPORT_PRIVATE = [self::DFRN, self::DIASPORA, self::MAIL, self::ACTIVITYPUB, self::PUMPIO];
+	public const SUPPORT_PRIVATE = [self::DFRN, self::DIASPORA, self::MAIL, self::ACTIVITYPUB, self::PUMPIO];
 
 	// Supported through a connector
-	const BLUESKY   = 'bsky';    // Bluesky
-	const DIASPORA2 = 'dspc';    // Diaspora connector
-	const DISCOURSE = 'dscs';    // Discourse
-	const PNUT      = 'pnut';    // pnut.io
-	const PUMPIO    = 'pump';    // pump.io
-	const TUMBLR    = 'tmbl';    // Tumblr
-	const TWITTER   = 'twit';    // Twitter
+	public const ATPROTO   = 'bsky';    // AT Protocol, short name "atproto" (Formerly known as Bluesky)
+	public const DIASPORA2 = 'dspc';    // Diaspora connector
+	public const DISCOURSE = 'dscs';    // Discourse
+	public const PNUT      = 'pnut';    // pnut.io
+	public const PUMPIO    = 'pump';    // pump.io
+	public const TUMBLR    = 'tmbl';    // Tumblr
+	public const TWITTER   = 'twit';    // Twitter
 
 	// Dead protocols
-	const APPNET    = 'apdn';    // app.net - Dead protocol
-	const FACEBOOK  = 'face';    // Facebook API - Not working anymore, API is closed
-	const GPLUS     = 'goog';    // Google+ - Dead in 2019
-	const OSTATUS   = 'stat';    // GNU Social and other OStatus implementations
-	const STATUSNET = 'stac';    // Statusnet connector
+	public const APPNET    = 'apdn';    // app.net - Dead protocol
+	public const FACEBOOK  = 'face';    // Facebook API - Not working anymore, API is closed
+	public const GPLUS     = 'goog';    // Google+ - Dead in 2019
+	public const OSTATUS   = 'stat';    // GNU Social and other OStatus implementations
+	public const STATUSNET = 'stac';    // Statusnet connector
 
 	// Currently unsupported
-	const ICALENDAR = 'ical';    // iCalendar
-	const LINKEDIN  = 'lnkd';    // LinkedIn
-	const MYSPACE   = 'mysp';    // MySpace
-	const NEWS      = 'nntp';    // Network News Transfer Protocol
-	const XMPP      = 'xmpp';    // XMPP
-	const ZOT       = 'zot!';    // Zot!
+	public const ICALENDAR = 'ical';    // iCalendar
+	public const LINKEDIN  = 'lnkd';    // LinkedIn
+	public const MYSPACE   = 'mysp';    // MySpace
+	public const NEWS      = 'nntp';    // Network News Transfer Protocol
+	public const XMPP      = 'xmpp';    // XMPP
+	public const ZOT       = 'zot!';    // Zot!
 
-	const PHANTOM   = 'unkn';    // Place holder
+	public const PHANTOM = 'unkn';    // Place holder
 
 	/**
 	 * Returns whether the provided protocol supports following
@@ -73,9 +75,14 @@ class Protocol
 
 		$hook_data = [
 			'protocol' => $protocol,
-			'result' => null
+			'result'   => null,
 		];
-		Hook::callAll('support_follow', $hook_data);
+
+		$eventDispatcher = DI::eventDispatcher();
+
+		$hook_data = $eventDispatcher->dispatch(
+			new ArrayFilterEvent(ArrayFilterEvent::PROTOCOL_SUPPORTS_FOLLOW, $hook_data),
+		)->getArray();
 
 		return $hook_data['result'] === true;
 	}
@@ -95,9 +102,14 @@ class Protocol
 
 		$hook_data = [
 			'protocol' => $protocol,
-			'result' => null
+			'result'   => null,
 		];
-		Hook::callAll('support_revoke_follow', $hook_data);
+
+		$eventDispatcher = DI::eventDispatcher();
+
+		$hook_data = $eventDispatcher->dispatch(
+			new ArrayFilterEvent(ArrayFilterEvent::PROTOCOL_SUPPORTS_REVOKE_FOLLOW, $hook_data),
+		)->getArray();
 
 		return $hook_data['result'] === true;
 	}
@@ -119,11 +131,11 @@ class Protocol
 			return true;
 		}
 
-		$protocol = $protocol ?? $contact['protocol'];
+		$protocol ??= $contact['protocol'];
 
 		if ($protocol == self::DIASPORA) {
 			$contact = Diaspora::sendShare($owner, $contact);
-			Logger::notice('share returns: ' . $contact);
+			DI::logger()->notice('share returns: ' . $contact);
 		} elseif (in_array($protocol, [self::ACTIVITYPUB, self::DFRN])) {
 			$activity_id = ActivityPub\Transmitter::activityIDFromContact($contact['id']);
 			if (empty($activity_id)) {
@@ -132,7 +144,7 @@ class Protocol
 			}
 
 			$success = ActivityPub\Transmitter::sendActivity('Follow', $contact['url'], $owner['uid'], $activity_id);
-			Logger::notice('Follow returns: ' . $success);
+			DI::logger()->notice('Follow returns: ' . $success);
 		}
 
 		return true;
@@ -150,7 +162,7 @@ class Protocol
 	public static function unfollow(array $contact, array $owner): ?bool
 	{
 		if (empty($contact['network'])) {
-			Logger::notice('Contact has got no network, we quit here', ['id' => $contact['id']]);
+			DI::logger()->notice('Contact has got no network, we quit here', ['id' => $contact['id']]);
 			return null;
 		}
 
@@ -171,7 +183,12 @@ class Protocol
 			'uid'     => $owner['uid'],
 			'result'  => null,
 		];
-		Hook::callAll('unfollow', $hook_data);
+
+		$eventDispatcher = DI::eventDispatcher();
+
+		$hook_data = $eventDispatcher->dispatch(
+			new ArrayFilterEvent(ArrayFilterEvent::UNFOLLOW_CONTACT, $hook_data),
+		)->getArray();
 
 		return $hook_data['result'];
 	}
@@ -206,7 +223,12 @@ class Protocol
 			'uid'     => $owner['uid'],
 			'result'  => null,
 		];
-		Hook::callAll('revoke_follow', $hook_data);
+
+		$eventDispatcher = DI::eventDispatcher();
+
+		$hook_data = $eventDispatcher->dispatch(
+			new ArrayFilterEvent(ArrayFilterEvent::REVOKE_FOLLOW_CONTACT, $hook_data),
+		)->getArray();
 
 		return $hook_data['result'];
 	}
@@ -241,10 +263,15 @@ class Protocol
 		// Catch-all hook for connector addons
 		$hook_data = [
 			'contact' => $contact,
-			'uid' => $uid,
-			'result' => null,
+			'uid'     => $uid,
+			'result'  => null,
 		];
-		Hook::callAll('block', $hook_data);
+
+		$eventDispatcher = DI::eventDispatcher();
+
+		$hook_data = $eventDispatcher->dispatch(
+			new ArrayFilterEvent(ArrayFilterEvent::BLOCK_CONTACT, $hook_data),
+		)->getArray();
 
 		return $hook_data['result'];
 	}
@@ -280,10 +307,15 @@ class Protocol
 		// Catch-all hook for connector addons
 		$hook_data = [
 			'contact' => $contact,
-			'uid' => $uid,
-			'result' => null,
+			'uid'     => $uid,
+			'result'  => null,
 		];
-		Hook::callAll('unblock', $hook_data);
+
+		$eventDispatcher = DI::eventDispatcher();
+
+		$hook_data = $eventDispatcher->dispatch(
+			new ArrayFilterEvent(ArrayFilterEvent::UNBLOCK_CONTACT, $hook_data),
+		)->getArray();
 
 		return $hook_data['result'];
 	}
@@ -302,15 +334,20 @@ class Protocol
 			return false;
 		}
 
-		if (in_array($protocol, array_merge(self::NATIVE_SUPPORT, [self::ZOT, self::BLUESKY, self::PHANTOM]))) {
+		if (in_array($protocol, array_merge(self::NATIVE_SUPPORT, [self::ZOT, self::ATPROTO, self::PHANTOM]))) {
 			return true;
 		}
 
 		$hook_data = [
 			'protocol' => $protocol,
-			'result' => null
+			'result'   => null,
 		];
-		Hook::callAll('support_probe', $hook_data);
+
+		$eventDispatcher = DI::eventDispatcher();
+
+		$hook_data = $eventDispatcher->dispatch(
+			new ArrayFilterEvent(ArrayFilterEvent::PROTOCOL_SUPPORTS_PROBE, $hook_data),
+		)->getArray();
 
 		return $hook_data['result'] === true;
 	}

@@ -8,12 +8,13 @@
 namespace Friendica\Test\src\Module\Api\Twitter\Statuses;
 
 use Friendica\App\Router;
+use Friendica\Core\Renderer;
 use Friendica\DI;
 use Friendica\Module\Api\Twitter\Statuses\Retweet;
 use Friendica\Network\HTTPException\BadRequestException;
-use Friendica\Test\src\Module\Api\ApiTest;
+use Friendica\Test\ApiTestCase;
 
-class RetweetTest extends ApiTest
+class RetweetTest extends ApiTestCase
 {
 	protected function setUp(): void
 	{
@@ -31,7 +32,7 @@ class RetweetTest extends ApiTest
 	{
 		$this->expectException(BadRequestException::class);
 
-		(new Retweet(DI::mstdnError(), DI::app(), DI::l10n(), DI::baseUrl(), DI::args(), DI::logger(), DI::profiler(), DI::apiResponse(), []))
+		(new Retweet(DI::mstdnError(), DI::appHelper(), DI::l10n(), DI::baseUrl(), DI::args(), DI::logger(), DI::profiler(), DI::apiResponse(), []))
 			->run($this->httpExceptionMock);
 	}
 
@@ -57,9 +58,9 @@ class RetweetTest extends ApiTest
 	 */
 	public function testApiStatusesRepeatWithId()
 	{
-		$response = (new Retweet(DI::mstdnError(), DI::app(), DI::l10n(), DI::baseUrl(), DI::args(), DI::logger(), DI::profiler(), DI::apiResponse(), []))
+		$response = (new Retweet(DI::mstdnError(), DI::appHelper(), DI::l10n(), DI::baseUrl(), DI::args(), DI::logger(), DI::profiler(), DI::apiResponse(), []))
 			->run($this->httpExceptionMock, [
-				'id' => 1
+				'id' => 1,
 			]);
 
 		$json = $this->toJson($response);
@@ -74,9 +75,12 @@ class RetweetTest extends ApiTest
 	 */
 	public function testApiStatusesRepeatWithSharedId()
 	{
-		$response = (new Retweet(DI::mstdnError(), DI::app(), DI::l10n(), DI::baseUrl(), DI::args(), DI::logger(), DI::profiler(), DI::apiResponse(), []))
+		// @todo: This call is needed for this test
+		Renderer::registerTemplateEngine(\Friendica\Render\FriendicaSmartyEngine::class);
+
+		$response = (new Retweet(DI::mstdnError(), DI::appHelper(), DI::l10n(), DI::baseUrl(), DI::args(), DI::logger(), DI::profiler(), DI::apiResponse(), []))
 			->run($this->httpExceptionMock, [
-				'id' => 5
+				'id' => 5,
 			]);
 
 		$json = $this->toJson($response);

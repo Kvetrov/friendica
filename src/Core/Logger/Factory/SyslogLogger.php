@@ -16,6 +16,8 @@ use Psr\Log\LoggerInterface;
 /**
  * The logger factory for the SyslogLogger instance
  *
+ * @deprecated 2026.01 Implement `\Friendica\Core\Logger\Factory\LoggerFactory` instead
+ * @see SyslogLoggerFactory
  * @see SyslogLoggerClass
  */
 class SyslogLogger extends AbstractLoggerTypeFactory
@@ -31,6 +33,8 @@ class SyslogLogger extends AbstractLoggerTypeFactory
 	 */
 	public function create(IManageConfigValues $config): LoggerInterface
 	{
+		@trigger_error('Class `' . self::class . '` is deprecated since 2026.01 and will be removed after 5 months, implement `\Friendica\Core\Logger\Factory\LoggerFactory` instead.', E_USER_DEPRECATED);
+
 		$logOpts     = $config->get('system', 'syslog_flags')    ?? SyslogLoggerClass::DEFAULT_FLAGS;
 		$logFacility = $config->get('system', 'syslog_facility') ?? SyslogLoggerClass::DEFAULT_FACILITY;
 		$loglevel    = SyslogLogger::mapLegacyConfigDebugLevel($config->get('system', 'loglevel'));

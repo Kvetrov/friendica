@@ -7,8 +7,6 @@
 
 namespace Friendica\Module\Api\Mastodon;
 
-use Friendica\Core\Logger;
-use Friendica\Core\System;
 use Friendica\Database\DBA;
 use Friendica\DI;
 use Friendica\Model\Item;
@@ -58,15 +56,13 @@ class Favourited extends BaseApi
 
 		$items = Post::selectForUser($uid, ['thr-parent-id'], $condition, $params);
 
-		$display_quotes = self::appSupportsQuotes();
-
 		$statuses = [];
 		while ($item = Post::fetch($items)) {
 			self::setBoundaries($item['thr-parent-id']);
 			try {
-				$statuses[] = DI::mstdnStatus()->createFromUriId($item['thr-parent-id'], $uid, $display_quotes);
+				$statuses[] = DI::mstdnStatus()->createFromUriId($item['thr-parent-id'], $uid);
 			} catch (\Exception $exception) {
-				Logger::info('Post not fetchable', ['uri-id' => $item['thr-parent-id'], 'uid' => $uid, 'exception' => $exception]);
+				$this->logger->info('Post not fetchable', ['uri-id' => $item['thr-parent-id'], 'uid' => $uid, 'exception' => $exception]);
 			}
 		}
 		DBA::close($items);

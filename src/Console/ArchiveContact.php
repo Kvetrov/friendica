@@ -7,7 +7,7 @@
 
 namespace Friendica\Console;
 
-use Friendica\App;
+use Friendica\App\Mode;
 use Friendica\Database\Database;
 use Friendica\DI;
 use Friendica\Model\Contact;
@@ -28,7 +28,7 @@ class ArchiveContact extends \Asika\SimpleConsole\Console
 	protected $helpOptions = ['h', 'help', '?'];
 
 	/**
-	 * @var App\Mode
+	 * @var Mode
 	 */
 	private $appMode;
 	/**
@@ -57,19 +57,19 @@ HELP;
 		return $help;
 	}
 
-	public function __construct(App\Mode $appMode, Database $dba, \Friendica\Core\L10n $l10n, array $argv = null)
+	public function __construct(Mode $appMode, Database $dba, \Friendica\Core\L10n $l10n, array $argv = null)
 	{
 		parent::__construct($argv);
 
 		$this->appMode = $appMode;
-		$this->dba = $dba;
-		$this->l10n = $l10n;
+		$this->dba     = $dba;
+		$this->l10n    = $l10n;
 	}
 
 	protected function doExecute(): int
 	{
 		if ($this->getOption('v')) {
-			$this->out('Class: ' . __CLASS__);
+			$this->out('Class: ' . self::class);
 			$this->out('Arguments: ' . var_export($this->args, true));
 			$this->out('Options: ' . var_export($this->options, true));
 		}

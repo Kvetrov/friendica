@@ -61,7 +61,7 @@ class Temporal
 
 		$o = '<select id="timezone_select" name="timezone">';
 
-		usort($timezone_identifiers, [__CLASS__, 'timezoneCompareCallback']);
+		usort($timezone_identifiers, [self::class, 'timezoneCompareCallback']);
 		$continent = '';
 		foreach ($timezone_identifiers as $value) {
 			$ex = explode("/", $value);
@@ -86,7 +86,7 @@ class Temporal
 					$o .= '<optgroup label="' . DI::l10n()->t($continent) . '">';
 				}
 			}
-			$city = str_replace('_', ' ', DI::l10n()->t($city));
+			$city     = str_replace('_', ' ', DI::l10n()->t($city));
 			$selected = (($value == $current) ? " selected=\"selected\" " : "");
 			$o .= "<option value=\"$value\" $selected >$city</option>";
 		}
@@ -133,31 +133,33 @@ class Temporal
 	 */
 	public static function getDateofBirthField(string $dob, string $timezone = 'UTC'): string
 	{
-		list($year, $month, $day) = sscanf($dob, '%4d-%2d-%2d');
+		[$year, $month, $day] = sscanf($dob, '%4d-%2d-%2d');
 
 		if ($dob < '0000-01-01') {
 			$value = '';
-			$age = 0;
+			$age   = 0;
 		} elseif ($dob < '0001-00-00') {
 			$value = substr($dob, 5);
-			$age = 0;
+			$age   = 0;
 		} else {
 			$value = DateTimeFormat::utc($dob, 'Y-m-d');
-			$age = self::getAgeByTimezone($value, $timezone);
+			$age   = self::getAgeByTimezone($value, $timezone);
 		}
 
 		$tpl = Renderer::getMarkupTemplate("field_input.tpl");
-		$o = Renderer::replaceMacros($tpl,
+		$o   = Renderer::replaceMacros(
+			$tpl,
 			[
-			'$field' => [
-				'dob',
-				DI::l10n()->t('Birthday:'),
-				$value,
-				intval($age) > 0 ? DI::l10n()->t('Age: ') . DI::l10n()->tt('%d year old', '%d years old', $age) : '',
-				'',
-				'placeholder="' . DI::l10n()->t('YYYY-MM-DD or MM-DD') . '"'
-			]
-		]);
+				'$field' => [
+					'dob',
+					DI::l10n()->t('Birthday:'),
+					$value,
+					intval($age) > 0 ? DI::l10n()->t('Age: ') . DI::l10n()->tt('%d year old', '%d years old', $age) : '',
+					'',
+					'placeholder="' . DI::l10n()->t('YYYY-MM-DD or MM-DD') . '"',
+				],
+			],
+		);
 
 		return $o;
 	}
@@ -218,26 +220,28 @@ class Temporal
 		DateTime $maxDate,
 		DateTime $defaultDate = null,
 		$label,
-		string $id       = 'datetimepicker',
+		string $id = 'datetimepicker',
 		bool $pickdate = true,
 		bool $picktime = true,
-		string $minfrom  = '',
-		string $maxfrom  = '',
-		bool $required = false): string
-	{
+		string $minfrom = '',
+		string $maxfrom = '',
+		bool $required = false
+	): string {
 		// First day of the week (0 = Sunday)
-		$firstDay = DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'calendar', 'first_day_of_week', 0);
+		$firstDay = DI::pConfig()->get(DI::userSession()->getLocalUserId(), 'calendar', 'first_day_of_week') ?: 0;
 
 		$lang = DI::l10n()->toISO6391(DI::l10n()->getCurrentLang());
 
 		// Check if the detected language is supported by the picker
-		if (!in_array($lang,
-				['ar', 'ro', 'id', 'bg', 'fa', 'ru', 'uk', 'en', 'el', 'de', 'nl', 'tr', 'fr', 'es', 'th', 'pl', 'pt', 'ch', 'se', 'kr',
-				'it', 'da', 'no', 'ja', 'vi', 'sl', 'cs', 'hu'])) {
+		if (!in_array(
+			$lang,
+			['ar', 'ro', 'id', 'bg', 'fa', 'ru', 'uk', 'en', 'el', 'de', 'nl', 'tr', 'fr', 'es', 'th', 'pl', 'pt', 'ch', 'se', 'kr',
+				'it', 'da', 'no', 'ja', 'vi', 'sl', 'cs', 'hu'],
+		)) {
 			$lang = 'en';
 		}
 
-		$o = '';
+		$o          = '';
 		$dateformat = '';
 
 		if ($pickdate) {
@@ -264,21 +268,21 @@ class Temporal
 				$input_text,
 				DI::l10n()->t(
 					'Time zone: <strong>%s</strong> <a href="%s">Change in Settings</a>',
-					str_replace('_', ' ', DI::app()->getTimeZone()) . ' (GMT ' . DateTimeFormat::localNow('P') . ')',
-					DI::baseUrl() . '/settings'
+					str_replace('_', ' ', DI::appHelper()->getTimeZone()) . ' (GMT ' . DateTimeFormat::localNow('P') . ')',
+					DI::baseUrl() . '/settings',
 				),
 				$required ? '*' : '',
-				'placeholder="' . $readable_format . '"'
+				'placeholder="' . $readable_format . '"',
 			],
 			'$datetimepicker' => [
-				'minDate' => $minDate,
-				'maxDate' => $maxDate,
+				'minDate'     => $minDate,
+				'maxDate'     => $maxDate,
 				'defaultDate' => $defaultDate,
-				'dateformat' => $dateformat,
-				'firstDay' => $firstDay,
-				'lang' => $lang,
-				'minfrom' => $minfrom,
-				'maxfrom' => $maxfrom,
+				'dateformat'  => $dateformat,
+				'firstDay'    => $firstDay,
+				'lang'        => $lang,
+				'minfrom'     => $minfrom,
+				'maxfrom'     => $maxfrom,
 			],
 		]);
 
@@ -306,10 +310,10 @@ class Temporal
 			return DI::l10n()->t('never');
 		}
 
-		$clock = $clock ?? new SystemClock();
+		$clock ??= new SystemClock();
 
 		$localtime = $posted_date . ' UTC';
-		$abs = strtotime($localtime);
+		$abs       = strtotime($localtime);
 
 		if ($abs === false) {
 			return DI::l10n()->t('never');
@@ -323,25 +327,25 @@ class Temporal
 		}
 
 		$isfuture = false;
-		$etime = $now - $abs;
+		$etime    = $now - $abs;
 
 		if ($etime >= 0 && $etime < 1) {
 			return $compare_time ? DI::l10n()->t('less than a second ago') : DI::l10n()->t('today');
 		}
 
-		if ($etime < 0){
-			$etime = -$etime;
+		if ($etime < 0) {
+			$etime    = -$etime;
 			$isfuture = true;
 		}
 
 		$a = [
 			12 * 30 * 24 * 60 * 60 => [DI::l10n()->t('year'), DI::l10n()->t('years')],
-			30 * 24 * 60 * 60 => [DI::l10n()->t('month'), DI::l10n()->t('months')],
-			7 * 24 * 60 * 60 => [DI::l10n()->t('week'), DI::l10n()->t('weeks')],
-			24 * 60 * 60 => [DI::l10n()->t('day'), DI::l10n()->t('days')],
-			60 * 60 => [DI::l10n()->t('hour'), DI::l10n()->t('hours')],
-			60 => [DI::l10n()->t('minute'), DI::l10n()->t('minutes')],
-			1 => [DI::l10n()->t('second'), DI::l10n()->t('seconds')],
+			30 * 24 * 60 * 60      => [DI::l10n()->t('month'), DI::l10n()->t('months')],
+			7 * 24 * 60 * 60       => [DI::l10n()->t('week'), DI::l10n()->t('weeks')],
+			24 * 60 * 60           => [DI::l10n()->t('day'), DI::l10n()->t('days')],
+			60 * 60                => [DI::l10n()->t('hour'), DI::l10n()->t('hours')],
+			60                     => [DI::l10n()->t('minute'), DI::l10n()->t('minutes')],
+			1                      => [DI::l10n()->t('second'), DI::l10n()->t('seconds')],
 		];
 
 		foreach ($a as $secs => $str) {
@@ -349,16 +353,17 @@ class Temporal
 			if ($d >= 1) {
 				$r = floor($d);
 				// translators - e.g. 22 hours ago, 1 minute ago
-				if($isfuture){
+				if ($isfuture) {
 					$format = DI::l10n()->t('in %1$d %2$s');
-				}
-				else {
+				} else {
 					$format = DI::l10n()->t('%1$d %2$s ago');
 				}
 
 				return sprintf($format, $r, (($r == 1) ? $str[0] : $str[1]));
 			}
 		}
+
+		return '';
 	}
 
 	/**
@@ -379,7 +384,7 @@ class Temporal
 			return 0;
 		}
 
-		$birthdate = new DateTime($dob . ' 00:00:00', new DateTimeZone($timezone));
+		$birthdate   = new DateTime($dob . ' 00:00:00', new DateTimeZone($timezone));
 		$currentDate = new DateTime('now', new DateTimeZone('UTC'));
 
 		$interval = $birthdate->diff($currentDate);
@@ -400,121 +405,6 @@ class Temporal
 	 */
 	public static function getDaysInMonth(int $y, int $m): int
 	{
-		return date('t', mktime(0, 0, 0, $m, 1, $y));
-	}
-
-	/**
-	 * Returns the first day in month for a given month, year.
-	 *
-	 * Months start at 1.
-	 *
-	 * @param int $y Year
-	 * @param int $m Month (1=January, 12=December)
-	 *
-	 * @return string day 0 = Sunday through 6 = Saturday
-	 * @throws \Exception
-	 */
-	private static function getFirstDayInMonth(int $y, int $m): string
-	{
-		$d = sprintf('%04d-%02d-01 00:00', intval($y), intval($m));
-
-		return DateTimeFormat::utc($d, 'w');
-	}
-
-	/**
-	 * Output a calendar for the given month, year.
-	 *
-	 * If $links are provided (array), e.g. $links[12] => 'http://mylink' ,
-	 * date 12 will be linked appropriately. Today's date is also noted by
-	 * altering td class.
-	 * Months count from 1.
-	 *
-	 * @param int    $y     Year
-	 * @param int    $m     Month
-	 * @param array  $links (default null)
-	 * @param string $class
-	 *
-	 * @return string
-	 *
-	 * @throws \Exception
-	 * @todo  Provide (prev, next) links, define class variations for different size calendars
-	 */
-	public static function getCalendarTable(int $y = 0, int $m = 0, array $links = null, string $class = ''): string
-	{
-		// month table - start at 1 to match human usage.
-		$mtab = [' ',
-			'January', 'February', 'March',
-			'April', 'May', 'June',
-			'July', 'August', 'September',
-			'October', 'November', 'December'
-		];
-
-		$thisyear = DateTimeFormat::localNow('Y');
-		$thismonth = DateTimeFormat::localNow('m');
-		if (!$y) {
-			$y = $thisyear;
-		}
-
-		if (!$m) {
-			$m = intval($thismonth);
-		}
-
-		$dn = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-		$f = self::getFirstDayInMonth($y, $m);
-		$l = self::getDaysInMonth($y, $m);
-		$d = 1;
-		$dow = 0;
-		$started = false;
-
-		if (($y == $thisyear) && ($m == $thismonth)) {
-			$tddate = intval(DateTimeFormat::localNow('j'));
-		}
-
-		$str_month = DI::l10n()->getDay($mtab[$m]);
-		$o = '<table class="calendar' . $class . '">';
-		$o .= "<caption>$str_month $y</caption><tr>";
-		for ($a = 0; $a < 7; $a ++) {
-			$o .= '<th>' . mb_substr(DI::l10n()->getDay($dn[$a]), 0, 3, 'UTF-8') . '</th>';
-		}
-
-		$o .= '</tr><tr>';
-
-		while ($d <= $l) {
-			if (($dow == $f) && (!$started)) {
-				$started = true;
-			}
-
-			$today = (((isset($tddate)) && ($tddate == $d)) ? "class=\"today\" " : '');
-			$o .= "<td $today>";
-			$day = str_replace(' ', '&nbsp;', sprintf('%2.2d', $d));
-			if ($started) {
-				if (isset($links[$d])) {
-					$o .= "<a href=\"{$links[$d]}\">$day</a>";
-				} else {
-					$o .= $day;
-				}
-
-				$d ++;
-			} else {
-				$o .= '&nbsp;';
-			}
-
-			$o .= '</td>';
-			$dow ++;
-			if (($dow == 7) && ($d <= $l)) {
-				$dow = 0;
-				$o .= '</tr><tr>';
-			}
-		}
-
-		if ($dow) {
-			for ($a = $dow; $a < 7; $a ++) {
-				$o .= '<td>&nbsp;</td>';
-			}
-		}
-
-		$o .= '</tr></table>' . "\r\n";
-
-		return $o;
+		return (int) date('t', mktime(0, 0, 0, $m, 1, $y));
 	}
 }

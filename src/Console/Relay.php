@@ -8,6 +8,7 @@
 namespace Friendica\Console;
 
 use Asika\SimpleConsole\CommandArgsException;
+use Friendica\Database\Database;
 use Friendica\Model\APContact;
 use Friendica\Protocol\ActivityPub\Transmitter;
 use Friendica\Protocol\Relay as ProtocolRelay;
@@ -23,7 +24,7 @@ class Relay extends \Asika\SimpleConsole\Console
 	protected $helpOptions = ['h', 'help', '?'];
 
 	/**
-	 * @var $dba Friendica\Database\Database
+	 * @var Database
 	 */
 	private $dba;
 
@@ -66,7 +67,7 @@ HELP;
 	{
 		if ($this->getOption('v')) {
 			$this->out('Executable: ' . $this->executable);
-			$this->out('Class: ' . __CLASS__);
+			$this->out('Class: ' . self::class);
 			$this->out('Arguments: ' . var_export($this->args, true));
 			$this->out('Options: ' . var_export($this->options, true));
 		}
@@ -86,7 +87,7 @@ HELP;
 		}
 
 		if (count($this->args) == 2) {
-			$mode = $this->getArgument(0);
+			$mode  = $this->getArgument(0);
 			$actor = $this->getArgument(1);
 
 			$apcontact = APContact::getByURL($actor);

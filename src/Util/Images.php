@@ -8,7 +8,6 @@
 namespace Friendica\Util;
 
 use Friendica\Core\Hook;
-use Friendica\Core\Logger;
 use Friendica\DI;
 use Friendica\Model\Photo;
 use Friendica\Network\HTTPClient\Client\HttpClientAccept;
@@ -21,7 +20,7 @@ use Friendica\Object\Image;
 class Images
 {
 	// @todo add IMAGETYPE_AVIF once our minimal supported PHP version is 8.1.0
-	const IMAGETYPES = [IMAGETYPE_WEBP, IMAGETYPE_PNG, IMAGETYPE_JPEG, IMAGETYPE_GIF, IMAGETYPE_BMP];
+	public const IMAGETYPES = [IMAGETYPE_WEBP, IMAGETYPE_PNG, IMAGETYPE_JPEG, IMAGETYPE_GIF, IMAGETYPE_BMP];
 
 	/**
 	 * Get the Imagick format for the given image type
@@ -103,7 +102,7 @@ class Images
 			}
 		}
 
-		Logger::debug('Undetected mimetype', ['mimetype' => $mimetype]);
+		DI::logger()->debug('Undetected mimetype', ['mimetype' => $mimetype]);
 		return 0;
 	}
 
@@ -116,7 +115,7 @@ class Images
 	public static function getExtensionByImageType(int $type): string
 	{
 		if (empty($type)) {
-			Logger::debug('Invalid image type', ['type' => $type]);
+			DI::logger()->debug('Invalid image type', ['type' => $type]);
 			return '';
 		}
 
@@ -189,9 +188,9 @@ class Images
 	 * Fetch image mimetype from the image data or guessing from the file name
 	 *
 	 * @param string $image_data Image data
-	 * @param string $filename   File name (for guessing the type via the extension)
-	 * @param string $default    Default MIME type
+	 *
 	 * @return string MIME type
+	 *
 	 * @throws \Exception
 	 */
 	public static function getMimeTypeByData(string $image_data): string
@@ -201,7 +200,7 @@ class Images
 			return $image['mime'];
 		}
 
-		Logger::debug('Undetected mime type', ['image' => $image, 'size' => strlen($image_data)]);
+		DI::logger()->debug('Undetected mime type', ['image' => $image, 'size' => strlen($image_data)]);
 
 		return '';
 	}
@@ -284,7 +283,7 @@ class Images
 			}
 		}
 
-		Logger::debug('Unhandled extension', ['filename' => $filename, 'extension' => $ext]);
+		DI::logger()->debug('Unhandled extension', ['filename' => $filename, 'extension' => $ext]);
 		return '';
 	}
 
@@ -308,13 +307,13 @@ class Images
 
 		$data = DI::cache()->get($cacheKey);
 
-		if (empty($data) || !is_array($data)) {
+		if (!is_array($data)) {
 			$data = self::getInfoFromURL($url, $ocr);
 
 			DI::cache()->set($cacheKey, $data);
 		}
 
-		return $data ?? [];
+		return $data;
 	}
 
 	/**
@@ -345,7 +344,7 @@ class Images
 			try {
 				$img_str = DI::httpClient()->fetch($url, HttpClientAccept::IMAGE, 4, '', HttpClientRequest::MEDIAVERIFIER);
 			} catch (\Exception $exception) {
-				Logger::notice('Image is invalid', ['url' => $url, 'exception' => $exception]);
+				DI::logger()->notice('Image is invalid', ['url' => $url, 'exception' => $exception]);
 				return [];
 			}
 		}
@@ -378,11 +377,42 @@ class Images
 					$data['description'] = $media['description'];
 				}
 			}
+
+			if (function_exists('exif_read_data')) {
+				try {
+					$stream = fopen('php://memory', 'r+');
+					fwrite($stream, $img_str);
+					rewind($stream);
+					$exif = @exif_read_data($stream, 'ANY_TAG, IFD0, EXIF, APP12, GPS, INTEROP');
+					fclose($stream);
+					if (is_array($exif)) {
+						$data['exif'] = self::sanitizeExifArray($exif);
+					}
+				} catch (\Exception $e) {
+					DI::logger()->error('Exception when trying to read EXIF data', ['code' => $e->getCode(), 'message' => $e->getMessage()]);
+				}
+			}
 		}
 
 		$data['size'] = $filesize;
 
 		return $data;
+	}
+
+	/**
+	 * Sanitize EXIF array by removing invalid UTF-8 characters from strings
+	 *
+	 * @param array $exif
+	 * @return array
+	 */
+	private static function sanitizeExifArray(array $exif): array
+	{
+		array_walk_recursive($exif, function (&$value) {
+			if (is_string($value)) {
+				$value = trim(iconv('UTF-8', 'UTF-8//IGNORE', $value));
+			}
+		});
+		return $exif;
 	}
 
 	/**
@@ -404,19 +434,19 @@ class Images
 			// constrain the width - let the height float.
 
 			if ((($height * 9) / 16) > $width) {
-				$dest_width = $max;
+				$dest_width  = $max;
 				$dest_height = intval(ceil(($height * $max) / $width));
 			} elseif ($width > $height) {
 				// else constrain both dimensions
-				$dest_width = $max;
+				$dest_width  = $max;
 				$dest_height = intval(ceil(($height * $max) / $width));
 			} else {
-				$dest_width = intval(ceil(($width * $max) / $height));
+				$dest_width  = intval(ceil(($width * $max) / $height));
 				$dest_height = $max;
 			}
 		} else {
 			if ($width > $max) {
-				$dest_width = $max;
+				$dest_width  = $max;
 				$dest_height = intval(ceil(($height * $max) / $width));
 			} else {
 				if ($height > $max) {
@@ -424,14 +454,14 @@ class Images
 					// but width is OK - don't do anything
 
 					if ((($height * 9) / 16) > $width) {
-						$dest_width = $width;
+						$dest_width  = $width;
 						$dest_height = $height;
 					} else {
-						$dest_width = intval(ceil(($width * $max) / $height));
+						$dest_width  = intval(ceil(($width * $max) / $height));
 						$dest_height = $max;
 					}
 				} else {
-					$dest_width = $width;
+					$dest_width  = $width;
 					$dest_height = $height;
 				}
 			}
@@ -455,7 +485,7 @@ class Images
 		return self::getBBCodeByUrl(
 			DI::baseUrl() . '/photos/' . $nickname . '/image/' . $resource_id,
 			DI::baseUrl() . '/photo/' . $resource_id . '-' . $preview . $ext,
-			$description
+			$description,
 		);
 	}
 

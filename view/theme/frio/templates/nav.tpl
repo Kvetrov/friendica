@@ -457,12 +457,20 @@
 			<a class="navbar-brand" href="#">
 				<div id="navbrand-container">
 					<div id="logo-img"></div>
-					<div id="navbar-brand-text"> Friendica</div>
+					<div id="navbar-brand-text"> Свои</div>
 				</div>
 			</a>
 		</div>
 			<div class="pull-right">
 				<ul class="nav navbar-nav navbar-right">
+					<li id="svoi-guest-search">
+						<form class="navbar-form" role="search" method="get" action="search">
+							<div class="form-group form-group-search">
+								<input class="form-control form-search" type="search" name="q" placeholder="Поиск">
+								<button class="btn btn-primary btn-md form-button-search" type="submit"><i class="fa fa-search" aria-hidden="true"></i></button>
+							</div>
+						</form>
+					</li>
 					<li>
 						<a href="login?mode=none" id="nav-login">
 							<i class="fa fa-sign-in fa-fw" aria-hidden="true"></i>
